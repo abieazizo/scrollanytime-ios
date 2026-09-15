@@ -178,6 +178,30 @@ tap_named "save" || tap "$RAIL_X" "$SAVE_Y" 0.1
 sleep 3
 shot 07-saved
 
+# SHARING (2026-09-15): the rail's WhatsApp, Download and More. A simulator has no WhatsApp, so the
+# shell's fallback is what gets recorded: the tap leaves for wa.me in Safari. Then back into the
+# app for the one-time download card, the ring (the clip's watermarked file is usually still
+# rendering on the day of the walk: "Preparing"), and the More sheet.
+axdump 07b-rail
+tap_named "whatsapp" --contains || tap "$RAIL_X" "$(fy 0.70)" 0.1
+sleep 4
+shot 07b-whatsapp
+xcrun simctl terminate "$UDID" com.apple.mobilesafari >/dev/null 2>&1 || true
+xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
+sleep 6
+tap_named "download" || tap "$RAIL_X" "$(fy 0.77)" 0.1
+sleep 2
+shot 07c-download-card
+axdump 07c-download-card
+tap_named "got it" --contains || tap "$MID_X" "$(fy 0.58)" 0.1
+sleep 3
+shot 07d-download-ring
+tap_named "more options" --contains || tap "$RAIL_X" "$(fy 0.84)" 0.1
+sleep 2.5
+shot 07e-more
+axdump 07e-more
+tap "$MID_X" "$(fy 0.10)" 1.5
+
 tap_named "my torah" --contains || tap "$TORAH_X" "$NAVY" 0.1
 sleep 4
 shot 08-my-torah
