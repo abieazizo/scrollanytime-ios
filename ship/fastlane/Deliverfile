@@ -1,0 +1,5 @@
+# Defaults for every deliver invocation. The lanes pass what varies; this holds what never does.
+app_identifier 'com.scrollanytime.app'
+# Nobody is at a browser to confirm an HTML preview, and precheck needs its own permissions.
+force true
+run_precheck_before_submit false

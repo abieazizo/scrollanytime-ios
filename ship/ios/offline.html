@@ -1,0 +1,212 @@
+<!doctype html>
+<!--
+  ship/ios/offline.html — PHASE LAUNCH PART 3.1, the iOS shell's first-open fallback.
+
+  WHAT THIS IS FOR
+  The web app has its own branded offline screen (app/src/screens/Offline.tsx) and its service
+  worker serves cached clips with no connection. But none of that exists until the app has
+  successfully loaded ONCE. If a reviewer installs the build, turns on airplane mode and opens it
+  cold, WKWebView has nothing to show and renders its own grey "cannot open page" error — or a
+  white screen. That is an automatic rejection under guideline 2.1 (crashes and bugs) and 4.2
+  (minimum functionality: "it's just a web page that doesn't work").
+
+  So the SHELL bundles this file and loads it in place of the failed navigation. It must be
+  bundled INSIDE the app, never fetched. Wiring instructions are in ship/ios/README.md, PART 3.1.
+
+  HARD RULES FOR THIS FILE — do not break them when editing:
+   1. ZERO external requests. No fonts, no images, no scripts, no stylesheets, no analytics, no
+      pixel, no preconnect. If it needs the network, it cannot be the offline page. (The empty
+      data: icon below exists to stop the browser requesting /favicon.ico.)
+   2. Inline CSS only, in this one file.
+   3. It must read as a calm, intentional part of Scroll Anytime — not as an error page. No red,
+      no warning triangle, no error code, no apology.
+   4. Colours are the app's own tokens: bg #0B0B0F, cream #F5F2EA, gold #C9A24B / glow #E3C87A.
+   5. System fonts only. Frank Ruhl Libre is named first in case the shell ever bundles it; the
+      Georgia fallback is what actually renders on iOS and it is a deliberate, tested choice.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0B0B0F" />
+    <title>Scroll Anytime</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #0b0b0f;
+        --cream: #f5f2ea;
+        --gold: #c9a24b;
+        --glow: #e3c87a;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: var(--bg);
+        color: var(--cream);
+        -webkit-text-size-adjust: 100%;
+        overscroll-behavior: none;
+      }
+
+      body {
+        /* Matches the app's boot splash exactly, so the handoff is invisible. */
+        background: radial-gradient(120% 100% at 50% 0%, #121019 0%, #0b0b0f 60%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100%;
+        padding:
+          calc(env(safe-area-inset-top, 0px) + 32px)
+          calc(env(safe-area-inset-right, 0px) + 28px)
+          calc(env(safe-area-inset-bottom, 0px) + 32px)
+          calc(env(safe-area-inset-left, 0px) + 28px);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      .wrap {
+        position: relative;
+        width: 100%;
+        max-width: 360px;
+        text-align: center;
+      }
+
+      /* The candle. A soft warm bloom behind the wordmark — the same light the app opens with. */
+      .candle {
+        position: absolute;
+        left: 50%;
+        top: -78px;
+        width: 320px;
+        height: 320px;
+        margin-left: -160px;
+        pointer-events: none;
+        background:
+          radial-gradient(closest-side, rgba(227, 200, 122, 0.20) 0%, rgba(227, 200, 122, 0.09) 42%, rgba(227, 200, 122, 0) 72%);
+        filter: blur(2px);
+        animation: breathe 6.5s ease-in-out infinite;
+      }
+
+      @keyframes breathe {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50%      { opacity: 1;    transform: scale(1.045); }
+      }
+
+      /* A still flame is still beautiful. Nothing here depends on motion. */
+      @media (prefers-reduced-motion: reduce) {
+        .candle { animation: none; }
+      }
+
+      .mark {
+        position: relative;
+        font-family: 'Frank Ruhl Libre', Georgia, 'Times New Roman', 'Iowan Old Style', serif;
+        font-size: 38px;
+        line-height: 1.15;
+        font-weight: 500;
+        letter-spacing: 0.045em;
+        color: var(--glow);
+        text-shadow: 0 0 40px rgba(227, 200, 122, 0.35);
+        margin: 0;
+      }
+
+      .rule {
+        position: relative;
+        width: 34px;
+        height: 1px;
+        margin: 26px auto;
+        background: linear-gradient(90deg, rgba(201, 162, 75, 0), rgba(201, 162, 75, 0.75), rgba(201, 162, 75, 0));
+      }
+
+      .line {
+        position: relative;
+        margin: 0 auto;
+        max-width: 320px;
+        font-size: 16px;
+        line-height: 1.62;
+        color: rgba(245, 242, 234, 0.80);
+        text-wrap: pretty;
+      }
+
+      .retry {
+        position: relative;
+        display: inline-block;
+        margin-top: 32px;
+        padding: 14px 40px;
+        min-height: 48px;
+        border: 1px solid rgba(201, 162, 75, 0.55);
+        border-radius: 999px;
+        background: rgba(201, 162, 75, 0.08);
+        color: var(--glow);
+        font-family: inherit;
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        -webkit-appearance: none;
+        appearance: none;
+        -webkit-tap-highlight-color: transparent;
+        transition: background 180ms ease, border-color 180ms ease, transform 120ms ease;
+      }
+
+      .retry:active {
+        background: rgba(201, 162, 75, 0.18);
+        border-color: rgba(201, 162, 75, 0.85);
+        transform: scale(0.985);
+      }
+
+      .retry:focus-visible {
+        outline: 2px solid var(--glow);
+        outline-offset: 3px;
+      }
+
+      /* Small phones (SE-class) — keep everything on one screen without scrolling. */
+      @media (max-height: 600px) {
+        .mark { font-size: 32px; }
+        .rule { margin: 20px auto; }
+        .retry { margin-top: 24px; }
+        .candle { top: -60px; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main class="wrap">
+      <div class="candle" aria-hidden="true"></div>
+
+      <h1 class="mark">Scroll Anytime</h1>
+      <div class="rule" aria-hidden="true"></div>
+
+      <p class="line">
+        Scroll Anytime needs a connection for your first open &mdash; your Torah is worth it
+      </p>
+
+      <button class="retry" type="button" id="retry" autofocus>Retry</button>
+    </main>
+
+    <script>
+      // Everything here is local. No network, no storage, no analytics, nothing to report.
+      (function () {
+        // The iOS shell shows this page via loadHTMLString with baseURL = the app's own URL, so
+        // location.reload() would depend on how WebKit resolves a synthetic document's URL.
+        // Navigating explicitly is unambiguous in the shell AND if this page is ever served.
+        var APP = 'https://scrollanytime.com/?app=ios';
+        function go() { location.href = APP; }
+
+        var retry = document.getElementById('retry');
+        if (retry) retry.addEventListener('click', go);
+
+        // If the connection comes back while this page is open, take them in without a tap —
+        // the same courtesy the in-app offline screen shows (app/src/screens/Offline.tsx).
+        // navigator.onLine is not trusted as a signal on its own anywhere in this codebase; here
+        // it is only used as a nudge to retry, and a failed retry simply lands back on this page.
+        window.addEventListener('online', go);
+      })();
+    </script>
+  </body>
+</html>

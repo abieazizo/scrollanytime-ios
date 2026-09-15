@@ -1,0 +1,160 @@
+# App Review item 1: a video of the app in use, beginning at launch.
+#
+# Apple asks for a recording made on a physical device. There is no physical device attached to
+# this pipeline, so this records the next most truthful thing: the REAL Scroll Anytime binary,
+# built from this commit, running on real iOS in the Simulator on a macOS runner, driven by real
+# touch events. Nothing is a browser mock-up and nothing is composited afterwards. Whatever this
+# produces is described to Apple as a Simulator recording — never as a device recording.
+name: demo-video
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'calibrate = screenshots only (tune coordinates) · record = produce the video'
+        type: choice
+        options: [calibrate, record]
+        default: calibrate
+      device:
+        description: 'Simulator device name'
+        default: 'iPhone 16 Pro'
+      nav_up:
+        description: 'Points from the bottom of the screen to the tab bar (calibration)'
+        default: '76'
+
+concurrency:
+  group: demo-video
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer && xcodebuild -version
+
+      - name: Boot the simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          want='${{ inputs.device }}'
+          d=json.load(sys.stdin)['devices']
+          cand=[x for k,v in d.items() if 'iOS' in k for x in v]
+          exact=[x for x in cand if x['name']==want]
+          pick=exact or sorted([x for x in cand if x['name'].startswith('iPhone 1')], key=lambda x:x['name'])
+          print(pick[-1]['udid'] if pick else '')")
+          [ -n "$UDID" ] || { echo '::error::no iPhone simulator available'; exit 1; }
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices | grep -i booted
+
+      - name: Build the app for the simulator
+        # Ad-hoc signed ("-"), NOT unsigned: SpringBoard validates the launch storyboard's resource
+        # seal before it renders it, and an unsigned bundle has none — run #5 (2026-09-14) logged
+        # "Security error -67056 … bad launch image", denylisted the app, and every launch in the
+        # recording began with a BLACK screen that was the Simulator's, not the app's. Ad-hoc needs
+        # no certificate and no team.
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ship/ios/pwa-shell.xcodeproj \
+            -scheme pwa-shell \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination "id=$UDID" \
+            -derivedDataPath ship/build/sim \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" \
+            | tail -25
+          APP="$(find ship/build/sim/Build/Products -maxdepth 2 -name '*.app' | head -1)"
+          echo "$APP"
+          codesign -dv "$APP" 2>&1 | head -5 || echo "::warning::the simulator app is not signed — the launch storyboard will not render"
+
+      - name: Install it
+        run: |
+          APP="$(find ship/build/sim/Build/Products -maxdepth 2 -name '*.app' | head -1)"
+          [ -n "$APP" ] || { echo '::error::no .app produced'; exit 1; }
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl listapps "$UDID" | grep -c com.scrollanytime.app
+
+      - name: idb (real touch events) and OpenCV (find the icon on the Home Screen)
+        run: |
+          brew tap facebook/fb
+          # Homebrew refuses formulae from a third-party tap until the tap is trusted, and says so
+          # only at install time � the first run died here with the app already built and installed.
+          brew trust facebook/fb || brew trust --formula facebook/fb/idb-companion || true
+          brew install idb-companion || HOMEBREW_NO_INSTALL_FROM_API=1 brew install facebook/fb/idb-companion
+          python3 -m pip install --break-system-packages fb-idb opencv-python-headless || \
+            python3 -m pip install fb-idb opencv-python-headless
+          idb_companion --udid "$UDID" > idb-companion.log 2>&1 &
+          sleep 5
+          idb list-targets || true
+
+      - name: Walk the app
+        env:
+          MODE: ${{ inputs.mode }}
+          NAV_UP: ${{ inputs.nav_up }}
+        run: |
+          # A freshly booted Simulator can sit without working DNS for a while: run #5 (2026-09-14)
+          # launched the app 80 s after boot, the first navigation failed after 34 s, and the walk
+          # spent itself on the bundled offline page. Warm the network in Safari first, off camera.
+          xcrun simctl openurl "$UDID" "https://scrollanytime.com/health" || true
+          sleep 8
+          xcrun simctl io "$UDID" screenshot ship/build/demo/00-network-warmup.png >/dev/null 2>&1 || true
+          if [ "$MODE" = "record" ]; then
+            xcrun simctl io "$UDID" recordVideo --codec h264 --force ship/build/demo.mp4 &
+            echo "REC=$!" >> "$GITHUB_ENV"
+            # the recorder takes its time to start: run #5's first captured frame came ~20 s in
+            sleep 12
+          fi
+          # the walk's failure must not kill the recorder before it writes its moov atom: finish
+          # the file first, then fail the step (2026-09-14: a failed walk left an unplayable mp4)
+          WALK=0
+          bash ship/demo/drive.sh || WALK=$?
+          if [ "$MODE" = "record" ]; then
+            sleep 2
+            # SIGINT to simctl ITSELF (not the shell job): the moov atom is written only on a clean stop
+            pkill -INT -f 'simctl io .* recordVideo' 2>/dev/null || kill -INT "$REC" 2>/dev/null || true
+            for i in $(seq 60); do
+              if ffprobe -v error -show_entries format=duration -of csv=p=0 ship/build/demo.mp4 >/dev/null 2>&1; then break; fi
+              sleep 1
+            done
+            ls -la ship/build/demo.mp4
+            ffprobe -v error -show_entries format=duration -of csv=p=0 ship/build/demo.mp4 || echo "::warning::recording did not finalize"
+          fi
+          exit "$WALK"
+
+      # whatever happened, say what the app itself did: crash reports and its unified log
+      - name: Crash reports and app log
+        if: always()
+        run: |
+          mkdir -p ship/build/demo/crash
+          cp ~/Library/Logs/DiagnosticReports/*.ips ship/build/demo/crash/ 2>/dev/null || true
+          cp ~/Library/Logs/DiagnosticReports/*.crash ship/build/demo/crash/ 2>/dev/null || true
+          ls -la ship/build/demo/crash || true
+          xcrun simctl spawn "$UDID" log show --last 8m --style compact \
+            --predicate 'processImagePath CONTAINS "pwa-shell" OR (process == "SpringBoard" AND eventMessage CONTAINS "scrollanytime") OR eventMessage CONTAINS "com.scrollanytime.app"' \
+            > ship/build/demo/app.log 2>&1 || true
+          wc -l ship/build/demo/app.log || true
+          grep -i "crash\|exception\|fatal\|SIGABRT\|Terminating\|watchdog" ship/build/demo/app.log | head -20 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-${{ inputs.mode }}
+          path: |
+            ship/build/demo.mp4
+            ship/build/demo/00-network-warmup.png
+            ship/build/demo/shots/*.png
+            ship/build/demo/ax/*.json
+            ship/build/demo/ax.log
+            ship/build/demo/find-icon.log
+            ship/build/demo/crash/*
+            ship/build/demo/app.log
+            idb-companion.log
+          retention-days: 14
+          if-no-files-found: warn

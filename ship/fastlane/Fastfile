@@ -1,0 +1,282 @@
+# Scroll Anytime — iOS release lanes, driven by .github/workflows/release-ios.yml on a macOS
+# runner. Every lane authenticates with the App Store Connect API key (App Manager role); there is
+# no Apple ID password anywhere, no .p12 to move between machines, and no keychain to keep in sync.
+#
+# Each lane is invoked as its own `fastlane <lane>` process, so nothing is shared through
+# lane_context. What must survive between them — the team id and the profile name — is written to
+# ship/build/signing.env by the `signing` lane and read back by the others. The certificate and the
+# provisioning profile survive because they live in the runner's keychain and profile directory.
+
+default_platform(:ios)
+
+APP_ID       = 'com.scrollanytime.app'
+SCHEME       = 'pwa-shell'
+ROOT         = File.expand_path('../..', __dir__)          # repo root
+IOS_DIR      = File.join(ROOT, 'ship', 'ios')
+PROJECT      = File.join(IOS_DIR, 'pwa-shell.xcodeproj')
+BUILD_DIR    = File.join(ROOT, 'ship', 'build')
+SIGNING_ENV  = File.join(BUILD_DIR, 'signing.env')
+METADATA_DIR = File.join(ROOT, 'ship', 'metadata')
+SCREENSHOTS  = File.join(ROOT, 'ship', 'fastlane', 'screenshots')
+
+# The API key, built from the three secrets. `is_key_content_base64` lets the .p8 travel as one
+# base64 line in a GitHub secret instead of a multi-line PEM that shell quoting mangles.
+def asc_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch('ASC_KEY_ID'),
+    issuer_id: ENV.fetch('ASC_ISSUER_ID'),
+    key_content: ENV.fetch('ASC_KEY_P8_BASE64'),
+    is_key_content_base64: true,
+    in_house: false,
+  )
+end
+
+def write_signing_env(team_id, profile_name)
+  FileUtils.mkdir_p(BUILD_DIR)
+  File.write(SIGNING_ENV, "TEAM_ID=#{team_id}\nPROFILE_NAME=#{profile_name}\n")
+  UI.success("signing.env → team #{team_id}, profile #{profile_name}")
+end
+
+def read_signing_env
+  UI.user_error!('signing.env is missing — run the `signing` lane first') unless File.exist?(SIGNING_ENV)
+  Hash[File.readlines(SIGNING_ENV).map { |l| l.strip.split('=', 2) }]
+end
+
+platform :ios do
+  # ── the app record ───────────────────────────────────────────────────────────────────────────
+  # Creating it through the API rather than by hand: the bundle id, the SKU and the name are then
+  # exactly what the build and the metadata expect, with no chance of a typo that only surfaces at
+  # upload. Safe to re-run — produce skips an app that already exists.
+  desc 'Create the App Store Connect app record if it does not exist'
+  lane :create_app do |options|
+    asc_key
+    produce(
+      app_identifier: APP_ID,
+      app_name: options[:app_name] || 'Scroll Anytime',
+      sku: options[:sku] || 'scrollanytime-001',
+      language: 'English (U.S.)',
+      platforms: ['ios'],
+      app_version: '1.0.0',
+    )
+  end
+
+  # ── signing ──────────────────────────────────────────────────────────────────────────────────
+  desc 'Create the distribution certificate and App Store profile on this runner'
+  lane :signing do
+    asc_key
+    # A distribution certificate for App Store builds. On a fresh runner there is none, so cert
+    # creates one; on a re-run it finds the existing one and downloads it into the keychain.
+    # Every run on a fresh runner needs a distribution certificate, and `cert` can only REUSE one
+    # whose private key is on this machine — which it never is, because the runner is destroyed.
+    # So it creates a new one each time, and Apple caps how many may exist. When that cap is hit
+    # the only certificates in the way are our own orphans: their private keys died with the
+    # runners that made them, nothing was ever signed with them, and revoking a distribution
+    # certificate does not affect apps already on the App Store. Revoke and retry, once.
+    begin
+      cert(
+        development: false,
+        keychain_path: File.expand_path('~/Library/Keychains/build.keychain-db'),
+        keychain_password: '',
+      )
+    rescue StandardError => e
+      raise unless e.message =~ /maximum number of available|reached the maximum/i
+      # REVOKE THE OLDEST, ONE AT A TIME — never all of them.
+      #
+      # The first version of this deleted EVERY distribution certificate, and that is how build 15
+      # was rejected with ITMS-90035 (Invalid Signature): the build was uploaded and valid, then a
+      # LATER run of this lane hit the cap, revoked every certificate including the one that had
+      # signed build 15, and Apple refused the binary at submission because its signing certificate
+      # no longer existed. A certificate that signed a build now in review must outlive that review.
+      #
+      # Freeing exactly one slot is all `cert` needs, and the oldest is the least likely to be
+      # holding up a build that is still in review.
+      # Free the oldest, retry; if the cap still bites (every runner's certificate is an orphan,
+      # and three orphans fill Apple's cap), free the next oldest and retry again — up to three.
+      # A certificate that signed a build now IN REVIEW must outlive that review: it is never the
+      # oldest by expiry, because it was minted on the most recent runner.
+      created = false
+      3.times do |attempt|
+        UI.important("Distribution certificate limit reached — freeing the OLDEST certificate (attempt #{attempt + 1})")
+        oldest = Spaceship::ConnectAPI::Certificate.all
+                                                   .select { |c| c.certificate_type.to_s.include?('DISTRIBUTION') }
+                                                   .min_by { |c| c.expiration_date.to_s } # oldest expiry == oldest issue
+        UI.user_error!('certificate limit reached and no distribution certificate to free') unless oldest
+        UI.message("  revoking #{oldest.id} (expires #{oldest.expiration_date})")
+        oldest.delete!
+        begin
+          cert(
+            development: false,
+            keychain_path: File.expand_path('~/Library/Keychains/build.keychain-db'),
+            keychain_password: '',
+          )
+          created = true
+          break
+        rescue StandardError => again
+          raise unless again.message =~ /maximum number of available|reached the maximum/i
+        end
+      end
+      UI.user_error!('could not free a distribution certificate slot after three revocations') unless created
+    end
+    # The App Store profile for this bundle id. force: true so a profile that is invalid (a new
+    # certificate, a changed capability) is regenerated instead of failing the archive later.
+    # `force` regenerates a profile that is invalid (new certificate, changed capability) instead of
+    # failing the archive later. It must NOT be paired with `readonly` — fastlane rejects the
+    # combination outright ("You can't enable both :force and :readonly").
+    # sigh RETURNS the path of the profile it downloaded — the one authoritative answer that does
+    # not depend on a fastlane constant or on where Xcode keeps profiles this year (16 moved them
+    # from ~/Library/MobileDevice/Provisioning Profiles to
+    # ~/Library/Developer/Xcode/UserData/Provisioning Profiles, which is how the first attempt at
+    # this "installed no provisioning profile" while holding a perfectly good one).
+    profile_path = sigh(
+      app_identifier: APP_ID,
+      development: false,
+      force: true,
+    )
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH] if profile_path.to_s.empty?
+    if profile_path.to_s.empty? || !File.exist?(profile_path.to_s)
+      candidates = Dir[File.expand_path('~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision')] +
+                   Dir[File.expand_path('~/Library/Developer/Xcode/UserData/Provisioning Profiles/*.mobileprovision')] +
+                   Dir[File.join(Dir.pwd, '*.mobileprovision')]
+      profile_path = candidates.max_by { |f| File.mtime(f) }
+    end
+    UI.user_error!('sigh produced no provisioning profile') if profile_path.nil?
+    UI.message("profile: #{profile_path}")
+
+    plist   = `security cms -D -i "#{profile_path}" 2>/dev/null`
+    team_id = ENV["sigh_#{APP_ID}_appstore_team-id"]
+    profile = ENV["sigh_#{APP_ID}_appstore_profile-name"]
+    team_id = plist[%r{<key>TeamIdentifier</key>\s*<array>\s*<string>([^<]+)</string>}, 1] if team_id.to_s.empty?
+    profile = plist[%r{<key>Name</key>\s*<string>([^<]+)</string>}, 1] if profile.to_s.empty?
+    UI.user_error!("could not read the team id from #{profile_path}") if team_id.to_s.empty?
+    UI.user_error!("could not read the profile name from #{profile_path}") if profile.to_s.empty?
+    write_signing_env(team_id, profile)
+  end
+
+  # ── build ────────────────────────────────────────────────────────────────────────────────────
+  desc 'Archive and export the App Store IPA'
+  lane :build do |options|
+    env = read_signing_env
+    build_number = (options[:build_number] || ENV['GITHUB_RUN_NUMBER'] || '1').to_s
+
+    # The project ships with automatic signing and an empty team, which cannot work on a runner
+    # that has no Apple ID session. Pin it to the profile sigh just created.
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: PROJECT,
+      team_id: env['TEAM_ID'],
+      code_sign_identity: 'Apple Distribution',
+      profile_name: env['PROFILE_NAME'],
+      bundle_identifier: APP_ID,
+      targets: [SCHEME],
+    )
+    increment_build_number(xcodeproj: PROJECT, build_number: build_number)
+
+    FileUtils.mkdir_p(BUILD_DIR)
+    gym(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: 'Release',
+      clean: true,
+      export_method: 'app-store',
+      output_directory: BUILD_DIR,
+      output_name: 'ScrollAnytime.ipa',
+      buildlog_path: BUILD_DIR,
+      xcargs: "DEVELOPMENT_TEAM=#{env['TEAM_ID']} CODE_SIGN_STYLE=Manual",
+      export_team_id: env['TEAM_ID'],
+      export_options: {
+        method: 'app-store',
+        teamID: env['TEAM_ID'],
+        signingStyle: 'manual',
+        provisioningProfiles: { APP_ID => env['PROFILE_NAME'] },
+        # Symbols help crash reports read like code instead of addresses; bitcode is dead.
+        uploadSymbols: true,
+        uploadBitcode: false,
+        destination: 'export',
+      },
+    )
+  end
+
+  # ── upload ───────────────────────────────────────────────────────────────────────────────────
+  desc 'Upload the IPA to App Store Connect (binary only)'
+  lane :upload do
+    asc_key
+    deliver(
+      app_identifier: APP_ID,
+      ipa: File.join(BUILD_DIR, 'ScrollAnytime.ipa'),
+      skip_metadata: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      submit_for_review: false,
+      force: true,               # no HTML preview to confirm — nobody is at a browser
+      run_precheck_before_submit: false,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  # ── metadata + screenshots ───────────────────────────────────────────────────────────────────
+  desc 'Push listing metadata and both screenshot sets'
+  lane :metadata do
+    asc_key
+    deliver(
+      app_identifier: APP_ID,
+      metadata_path: METADATA_DIR,
+      screenshots_path: SCREENSHOTS,
+      skip_binary_upload: true,
+      skip_app_version_update: false,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      force: true,
+      run_precheck_before_submit: false,
+      precheck_include_in_app_purchases: false,
+    )
+  end
+
+  # ── screenshots only ─────────────────────────────────────────────────────────────────────────
+  # Separate from `metadata` on purpose. deliver pushes review_information whenever those files
+  # exist, and Apple rejects that payload without a contact phone — which stalled the screenshots
+  # behind a field that is only needed at submission time. This lane touches nothing else.
+  desc 'Push both screenshot sets and nothing else'
+  lane :screenshots do
+    asc_key
+    deliver(
+      app_identifier: APP_ID,
+      screenshots_path: SCREENSHOTS,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_screenshots: false,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      submit_for_review: false,
+      force: true,
+      run_precheck_before_submit: false,
+    )
+  end
+
+  # ── submit ───────────────────────────────────────────────────────────────────────────────────
+  # Deliberately its own lane behind its own workflow input. The owner's 30-minute device test
+  # gates submission; a pipeline that submitted as a side effect of uploading would make that gate
+  # decorative.
+  desc 'Submit the current build to App Review'
+  lane :submit do |options|
+    asc_key
+    build_number = (options[:build_number] || ENV['GITHUB_RUN_NUMBER'] || '1').to_s
+    deliver(
+      app_identifier: APP_ID,
+      build_number: build_number,
+      metadata_path: METADATA_DIR,
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: true,
+      automatic_release: false,   # the owner presses Release, not Apple
+      force: true,
+      run_precheck_before_submit: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+        export_compliance_uses_encryption: false,
+        content_rights_contains_third_party_content: true,
+        content_rights_has_rights: true,
+      },
+    )
+  end
+end

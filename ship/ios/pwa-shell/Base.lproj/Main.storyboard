@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="19529" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="BYZ-38-t0r">
+    <device id="retina6_0" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <deployment identifier="iOS"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="19519"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--View Controller-->
+        <scene sceneID="tne-QT-ifu">
+            <objects>
+                <viewController id="BYZ-38-t0r" customClass="ViewController" customModule="PWAShell" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="8bC-Xf-vdC">
+                        <rect key="frame" x="0.0" y="0.0" width="390" height="844"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <view contentMode="scaleToFill" id="PHY-vp-dMl" userLabel="Webview View">
+                                <rect key="frame" x="0.0" y="0.0" width="390" height="844"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <subviews>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="DIO-mU-n27" userLabel="Loading View">
+                                        <rect key="frame" x="0.0" y="0.0" width="390" height="844"/>
+                                        <subviews>
+                                            <view hidden="YES" userInteractionEnabled="NO" contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LV-spacer" userLabel="Spacer 40%">
+                                                <rect key="frame" x="0.0" y="47" width="390" height="305"/>
+                                                <color key="backgroundColor" white="0.0" alpha="0.0" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                            </view>
+                                            <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="1000" verticalHuggingPriority="1000" image="LaunchIcon" translatesAutoresizingMaskIntoConstraints="NO" id="4oa-LZ-pgs" userLabel="Closed Scroll">
+                                                <rect key="frame" x="139" y="296" width="112" height="112"/>
+                                            </imageView>
+                                            <progressView hidden="YES" opaque="NO" contentMode="scaleToFill" verticalHuggingPriority="750" progress="0.10000000000000001" translatesAutoresizingMaskIntoConstraints="NO" id="xSD-dq-HF9">
+                                                <rect key="frame" x="145" y="526" width="100" height="2"/>
+                                                <color key="trackTintColor" red="0.2" green="0.18" blue="0.13" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                                <color key="progressTintColor" red="0.788" green="0.635" blue="0.294" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                            </progressView>
+                                            <imageView hidden="YES" opaque="NO" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="wifi.slash" catalog="system" translatesAutoresizingMaskIntoConstraints="NO" id="TpV-I7-c6z">
+                                                <rect key="frame" x="179" y="464" width="32" height="30"/>
+                                                <color key="tintColor" red="0.725" green="0.71" blue="0.667" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                            </imageView>
+                                        </subviews>
+                                        <viewLayoutGuide key="safeArea" id="a0B-Gx-0cO"/>
+                                        <color key="backgroundColor" red="0.043137254901960784" green="0.043137254901960784" blue="0.058823529411764705" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                                        <constraints>
+                                            <constraint firstItem="LV-spacer" firstAttribute="top" secondItem="a0B-Gx-0cO" secondAttribute="top" id="lv-spc-top"/>
+                                            <constraint firstItem="LV-spacer" firstAttribute="leading" secondItem="a0B-Gx-0cO" secondAttribute="leading" id="lv-spc-lead"/>
+                                            <constraint firstItem="LV-spacer" firstAttribute="trailing" secondItem="a0B-Gx-0cO" secondAttribute="trailing" id="lv-spc-trail"/>
+                                            <constraint firstItem="LV-spacer" firstAttribute="height" secondItem="a0B-Gx-0cO" secondAttribute="height" multiplier="0.4" id="lv-spc-h"/>
+                                            <constraint firstItem="4oa-LZ-pgs" firstAttribute="centerY" secondItem="LV-spacer" secondAttribute="bottom" id="lv-ico-cy"/>
+                                            <constraint firstItem="4oa-LZ-pgs" firstAttribute="centerX" secondItem="DIO-mU-n27" secondAttribute="centerX" id="lv-ico-cx"/>
+                                            <constraint firstItem="4oa-LZ-pgs" firstAttribute="width" constant="112" id="lv-ico-w"/>
+                                            <constraint firstItem="4oa-LZ-pgs" firstAttribute="height" constant="112" id="lv-ico-h"/>
+                                            <constraint firstItem="xSD-dq-HF9" firstAttribute="centerX" secondItem="DIO-mU-n27" secondAttribute="centerX" id="lv-pv-cx"/>
+                                            <constraint firstItem="xSD-dq-HF9" firstAttribute="top" secondItem="4oa-LZ-pgs" secondAttribute="bottom" constant="118" id="lv-pv-top"/>
+                                            <constraint firstItem="xSD-dq-HF9" firstAttribute="width" constant="100" id="lv-pv-w"/>
+                                            <constraint firstItem="TpV-I7-c6z" firstAttribute="centerX" secondItem="DIO-mU-n27" secondAttribute="centerX" id="lv-cp-cx"/>
+                                            <constraint firstItem="TpV-I7-c6z" firstAttribute="top" secondItem="4oa-LZ-pgs" secondAttribute="bottom" constant="140" id="lv-cp-top"/>
+                                        </constraints>
+                                    </view>
+                                </subviews>
+                                <!--The loading view is a DIRECT child of the webview view, pinned to it, and the
+                                    web view is inserted right below it (ViewController.initWebView). Build 24
+                                    wrapped it in an unconstrained "Splash Background" that collapsed to 0x0; build 25
+                                    pinned that wrapper but put the web view UNDER it, so lifting the loading view
+                                    revealed the wrapper's ground, never the page. Nothing sits between the loading
+                                    view and the web view now.-->
+                                <constraints>
+                                    <constraint firstItem="DIO-mU-n27" firstAttribute="top" secondItem="PHY-vp-dMl" secondAttribute="top" id="lv-fill-top"/>
+                                    <constraint firstItem="DIO-mU-n27" firstAttribute="bottom" secondItem="PHY-vp-dMl" secondAttribute="bottom" id="lv-fill-bottom"/>
+                                    <constraint firstItem="DIO-mU-n27" firstAttribute="leading" secondItem="PHY-vp-dMl" secondAttribute="leading" id="lv-fill-lead"/>
+                                    <constraint firstItem="DIO-mU-n27" firstAttribute="trailing" secondItem="PHY-vp-dMl" secondAttribute="trailing" id="lv-fill-trail"/>
+                                </constraints>
+                            </view>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
+                        <color key="backgroundColor" red="0.043137254901960784" green="0.043137254901960784" blue="0.058823529411764705" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                    </view>
+                    <connections>
+                        <outlet property="connectionProblemView" destination="TpV-I7-c6z" id="76F-WR-UnJ"/>
+                        <outlet property="launchIconView" destination="4oa-LZ-pgs" id="lv-ico-out"/>
+                        <outlet property="loadingView" destination="DIO-mU-n27" id="Wlk-Yd-6b1"/>
+                        <outlet property="progressView" destination="xSD-dq-HF9" id="0jL-XR-Xwq"/>
+                        <outlet property="webviewView" destination="PHY-vp-dMl" id="qhH-E4-3lf"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="1036.9230769230769" y="135.07109004739337"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="LaunchIcon" width="112" height="112"/>
+        <image name="wifi.slash" catalog="system" width="128" height="102"/>
+        <systemColor name="secondaryLabelColor">
+            <color red="0.23529411764705882" green="0.23529411764705882" blue="0.2627450980392157" alpha="0.59999999999999998" colorSpace="custom" customColorSpace="sRGB"/>
+        </systemColor>
+        <systemColor name="secondarySystemFillColor">
+            <color red="0.47058823529411764" green="0.47058823529411764" blue="0.50196078431372548" alpha="0.16" colorSpace="custom" customColorSpace="sRGB"/>
+        </systemColor>
+        <systemColor name="systemBackgroundColor">
+            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+        </systemColor>
+    </resources>
+</document>

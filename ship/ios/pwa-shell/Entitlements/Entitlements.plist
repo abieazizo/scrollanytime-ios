@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Scroll Anytime — iOS shell entitlements.
+
+  The PWABuilder template ships this file declaring aps-environment (push), camera, audio-input,
+  location, printing and the macOS app-sandbox keys. Scroll Anytime uses NONE of them. Declaring an
+  entitlement the app does not exercise is a Guideline 2.5.4 rejection, and the camera / mic /
+  location ones would flatly contradict the privacy answers already filed in App Store Connect.
+
+  What remains earns its place: associated domains, so a shared /c/ or /r/ link opens the app
+  instead of Safari; and Sign in with Apple (1.0.2), which the account sheet and the onboarding
+  hero offer natively through the shell's `siwa` bridge (SignInWithApple.swift). The site already serves
+  /.well-known/apple-app-site-association for those paths; it stays inert until the owner sets
+  `apple_app_id` (TEAMID.com.scrollanytime.app) in /admin → Config, so shipping this is safe either
+  way.
+
+  ship/ios-lint.sh checks this file against an exact whitelist and fails loudly on anything else.
+
+  Deliberately ABSENT:
+    aps-environment                              — no push in v1.0; the web app hides all push UI
+                                                   in ios-app mode and feature-detects PushManager,
+                                                   so WKWebView never even asks
+    com.apple.security.device.camera             — no capture anywhere in the product
+    com.apple.security.device.audio-input        — same
+    com.apple.security.personal-information.location
+                                                 — there is no location code in the product at all
+    com.apple.security.print                     — nothing is printable
+    com.apple.security.app-sandbox / files.*     — macOS keys; meaningless in an iOS app
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:scrollanytime.com</string>
+		<string>applinks:www.scrollanytime.com</string>
+	</array>
+</dict>
+</plist>

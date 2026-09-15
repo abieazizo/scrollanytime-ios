@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Scroll Anytime — iOS shell Info.plist.
+
+  This is the PWABuilder template's plist with every capability the app does not use REMOVED.
+  The stock template ships with camera, microphone and location usage strings, two background
+  modes (processing + remote-notification) and a background-task identifier — all of which
+  Scroll Anytime uses none of. Shipping any one of them is a Guideline 2.5.4 / 5.1.1 rejection,
+  and the usage strings would also contradict the privacy answers already filed.
+
+  ship/ios-lint.sh re-verifies this file against an exact whitelist and fails loudly. If you add a
+  key here, add it there too, deliberately.
+
+  Deliberately ABSENT, each for a stated reason:
+    NSCameraUsageDescription / NSMicrophoneUsageDescription  — the app has no capture of any kind
+    NSLocation*UsageDescription                              — there is no location code in the
+                                                               product at all (Shabbat mode was
+                                                               deleted product-wide)
+    NSPhotoLibrary* / NSContacts*                            — never read
+    UIBackgroundModes                                        — Listen Mode ships screen-on; a
+                                                               declared-but-unused audio mode is
+                                                               the textbook 2.5.4 rejection
+                                                               (store/XCODE_CHECKLIST.md)
+    BGTaskSchedulerPermittedIdentifiers                      — no background tasks
+    aps-environment (entitlement)                            — no push in v1.0
+    NSAppTransportSecurity                                   — the app is HTTPS-only; the stock
+                                                               NSAllowsArbitraryLoads=true is an
+                                                               invitation to be asked why
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Scroll Anytime</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- ITMS-90713: an app without this is rejected at upload -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.education</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- iPhone only. An iPad still opens it in compatibility mode; the app's centered-column rule
+	     handles that and is asserted by scripts/launch-check.mjs. -->
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<!-- A vertical video feed. Portrait only, on iPhone and in iPad compatibility mode alike. -->
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<!-- light content on the #0B0B0F ground -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<!-- WITHOUT this the service worker does not run in WKWebView, so offline mode silently does
+	     not work and the airplane-mode first launch fails in a way nothing else would catch. -->
+	<!-- canOpenURL(whatsapp://) must be declared, or iOS answers false and logs a policy error -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>scrollanytime.com</string>
+		<string>www.scrollanytime.com</string>
+		<!-- The sign-in providers' pages load in this same web view (Settings.swift authOrigins).
+		     With limitsNavigationsToAppBoundDomains on, a main-frame navigation to a host that is
+		     not listed here FAILS (WKErrorNavigationAppBoundDomain) — which the shell then showed as
+		     "no connection": "Continue with Google" went nowhere until 2026-09-15. Apple's own
+		     sign-in is native (SignInWithApple.swift) and never navigates; its host is listed for
+		     the web fallback. Ten entries at most. -->
+		<string>accounts.google.com</string>
+		<string>google.com</string>
+		<string>appleid.apple.com</string>
+		<string>apple.com</string>
+	</array>
+</dict>
+</plist>
