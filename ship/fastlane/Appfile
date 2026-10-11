@@ -1,0 +1,3 @@
+# Identity for every lane. The team id is NOT pinned here: the API key resolves it, and a hardcoded
+# team is the classic way a pipeline breaks the day an account changes.
+app_identifier(ENV['APP_IDENTIFIER'] || 'com.scrollanytime.app')
