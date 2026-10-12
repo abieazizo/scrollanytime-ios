@@ -17,6 +17,14 @@
 
   ship/ios-lint.sh checks this file against an exact whitelist and fails loudly on anything else.
 
+  aps-environment (2026-10-12): PRESENT, and earned. The Push Notifications capability is on the
+  App ID and an APNs key is in the Worker's secrets (key 79W6F475G5, Sandbox & Production,
+  team-scoped; APNS_KEY / APNS_KEY_ID / APNS_TEAM_ID / APNS_BUNDLE_ID). The value is
+  `production` because ship/mac-run.sh exports with method `app-store-connect`: TestFlight and
+  the App Store both use the PRODUCTION APNs environment. A development-signed build would need
+  `development` instead — the key covers both environments, so only this string changes.
+
+  The history, kept because it explains the shape of this file:
   aps-environment (2026-09-28): NOT YET. The shell schedules LOCAL notifications (NotifyBridge.swift:
   the daily seder, streak at risk, the weekly recap, come back - all planned from /me/rollup), which
   need no entitlement. Remote pushes (a milestone while the app is closed, a rabbi's new clips) need
@@ -36,6 +44,8 @@
 -->
 <plist version="1.0">
 <dict>
+	<key>aps-environment</key>
+	<string>production</string>
 	<key>com.apple.developer.applesignin</key>
 	<array>
 		<string>Default</string>
