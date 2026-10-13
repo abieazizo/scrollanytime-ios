@@ -1,0 +1,14 @@
+{
+  "name": "scrollanytime-film",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "qa": "node qa/qa.mjs"
+  },
+  "dependencies": {
+    "@fontsource/frank-ruhl-libre": "^5.1.0",
+    "@fontsource/inter": "^5.1.0",
+    "playwright-core": "^1.56.1",
+    "three": "^0.169.0"
+  }
+}

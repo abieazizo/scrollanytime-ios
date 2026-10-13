@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  @font-face { font-family: FRL; src: url(/assets/fonts/FrankRuhlLibre-500.ttf); font-weight: 500; }
+  @font-face { font-family: Inter; src: url(/assets/fonts/Inter-500.ttf); font-weight: 500; }
+  @font-face { font-family: Inter; src: url(/assets/fonts/Inter-600.ttf); font-weight: 600; }
+  html, body { margin:0; width:1179px; height:2556px; background:transparent; overflow:hidden; color:#F5F2EA; }
+  .shade-top { position:absolute; left:0; right:0; top:0; height:330px; background:linear-gradient(rgba(0,0,0,.45), rgba(0,0,0,0)); }
+  .status { position:absolute; top:52px; left:0; right:0; font:600 50px Inter; }
+  .status .time { position:absolute; left:120px; }
+  .status .ind { position:absolute; right:110px; top:10px; display:flex; gap:14px; align-items:flex-end; }
+  .bar { width:10px; background:#F5F2EA; border-radius:3px; }
+  .batt { width:76px; height:36px; border:4px solid rgba(245,242,234,.5); border-radius:11px; position:relative; margin-left:12px; }
+  .batt::after { content:''; position:absolute; inset:4px; right:30px; background:#F5F2EA; border-radius:5px; }
+  .tabs { position:absolute; top:190px; left:0; right:0; text-align:center; font:500 52px FRL; text-shadow:0 2px 12px rgba(0,0,0,.6); }
+  .tabs span { margin:0 42px; }
+  .tabs .on { color:#C9A24B; }
+  .tabs .off { color:rgba(245,242,234,.72); }
+  .dot { position:absolute; top:268px; left:calc(50% - 168px); width:12px; height:12px; border-radius:6px; background:#C9A24B; }
+  .rail { position:absolute; right:40px; top:1390px; width:150px; text-align:center; font:600 32px Inter; text-shadow:0 2px 10px rgba(0,0,0,.7); }
+  .rail .it { margin-bottom:58px; }
+  .rail svg { display:block; margin:0 auto 10px; filter: drop-shadow(0 2px 8px rgba(0,0,0,.6)); }
+  .av { width:118px; height:118px; border-radius:59px; border:5px solid #C9A24B; margin:0 auto 70px; background:url(/work/content/ov_avatar.png) center/cover; position:relative; }
+  .av::after { content:'+'; position:absolute; left:39px; bottom:-26px; width:40px; height:40px; border-radius:20px; background:#C9A24B; color:#0B0B0F; font:600 36px/40px Inter; }
+  .prog { position:absolute; left:60px; right:60px; top:2268px; height:8px; border-radius:4px; background:rgba(245,242,234,.25); }
+  .prog i { position:absolute; left:0; top:0; bottom:0; width:22%; background:#C9A24B; border-radius:4px; }
+  nav { position:absolute; left:0; right:0; bottom:0; height:250px; background:rgba(11,11,15,.96); border-top:2px solid rgba(255,255,255,.06); }
+  nav .it { position:absolute; top:44px; width:220px; text-align:center; font:500 34px Inter; color:rgba(245,242,234,.55); }
+  nav .it svg { display:block; margin:0 auto 12px; }
+  nav .on { color:#C9A24B; }
+  .home { position:absolute; bottom:24px; left:50%; width:420px; margin-left:-210px; height:14px; border-radius:7px; background:rgba(245,242,234,.85); }
+</style></head><body>
+  <div class="shade-top"></div>
+  <div class="status"><span class="time">11:48</span><span class="ind"><span class="bar" style="height:14px"></span><span class="bar" style="height:22px"></span><span class="bar" style="height:30px"></span><span class="bar" style="height:38px"></span><span class="batt"></span></span></div>
+  <div class="tabs"><span class="on">For you</span><span class="off">Following</span></div>
+  <div class="dot"></div>
+  <div class="rail">
+    <div class="av"></div>
+    <div class="it"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#F5F2EA" stroke-width="1.5"><path d="M12 2.5l2.9 5h5.8l-2.9 5 2.9 5h-5.8l-2.9 5-2.9-5H3.3l2.9-5-2.9-5h5.8z"/></svg>Save</div>
+    <div class="it"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#F5F2EA" stroke-width="1.6"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>Share</div>
+    <div class="it"><svg width="76" height="76" viewBox="0 0 24 24" fill="none" stroke="#F5F2EA" stroke-width="1.6"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.5 10.2a2 2 0 100 3.6M16.5 10.2a2 2 0 100 3.6"/></svg>CC</div>
+    <div class="it"><svg width="76" height="76" viewBox="0 0 24 24" fill="#F5F2EA"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>More</div>
+  </div>
+  <div class="prog"><i></i></div>
+  <nav>
+    <div class="it on" style="left:40px"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg>Feed</div>
+    <div class="it" style="left:310px"><svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 5.6L20 9l-4.4 3.8L17 19l-5-3-5 3 1.4-6.2L4 9l5.6-1.4z"/></svg>My Torah</div>
+    <div class="it" style="left:580px"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/></svg>Rabbis</div>
+    <div class="it" style="left:850px"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 21c0-4.1 3.4-7.4 7.5-7.4s7.5 3.3 7.5 7.4"/></svg>Profile</div>
+    <div class="home"></div>
+  </nav>
+<script>window.__ready = true;</script>
+</body></html>

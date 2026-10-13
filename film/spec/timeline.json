@@ -1,0 +1,267 @@
+{
+  "_": "Single source of truth for every time in the film. Seconds. Everything (picture, music, sfx, QA) reads this file.",
+  "fps": 30,
+  "duration": 20.0,
+  "size": [
+    1080,
+    1920
+  ],
+  "screen_content_size": [
+    1179,
+    2556
+  ],
+  "shots": [
+    {
+      "id": "H1",
+      "t0": 0.0,
+      "t1": 1.4,
+      "plate": "H1",
+      "src_in": 0.0
+    },
+    {
+      "id": "H2",
+      "t0": 1.4,
+      "t1": 3.0,
+      "plate": "H2",
+      "src_in": 0.0
+    },
+    {
+      "id": "H3",
+      "t0": 3.0,
+      "t1": 6.8,
+      "plate": "H3",
+      "src_in": 0.0
+    },
+    {
+      "id": "PORTRAITS",
+      "t0": 7.0,
+      "t1": 11.0,
+      "plate": "H4",
+      "src_in": 0.0,
+      "bg_brightness": 0.7,
+      "bg_defocus_px": 14
+    },
+    {
+      "id": "H5",
+      "t0": 11.0,
+      "t1": 14.0,
+      "plate": "H5",
+      "src_in": 0.0
+    },
+    {
+      "id": "WORDS",
+      "t0": 14.0,
+      "t1": 17.0,
+      "plate": "H4",
+      "src_in": 2.0,
+      "bg_brightness": 0.2,
+      "bg_defocus_px": 34
+    },
+    {
+      "id": "H6",
+      "t0": 17.0,
+      "t1": 20.0,
+      "plate": "H6",
+      "src_in": 0.0
+    }
+  ],
+  "h1": {
+    "clock_text": "11:47 PM",
+    "clock_px": 56,
+    "clock_alpha": 0.7,
+    "flicks": [
+      0.3,
+      0.78
+    ]
+  },
+  "h2": {
+    "flicks": [
+      2.05
+    ]
+  },
+  "h3": {
+    "ovadia": {
+      "t0": 3.0,
+      "t1": 4.14,
+      "voice_up": [
+        3.0,
+        3.8
+      ]
+    },
+    "named": [
+      {
+        "who": "Rabbi Joey Haber",
+        "dur": 0.6
+      },
+      {
+        "who": "Rabbi Shlomo Farhi",
+        "dur": 0.6
+      }
+    ],
+    "fast": [
+      0.3,
+      0.25,
+      0.2,
+      0.15,
+      0.12,
+      0.1,
+      0.08,
+      0.06
+    ],
+    "swipe_frac": 0.45,
+    "swipe_max": 0.16,
+    "flare": [
+      6.6,
+      6.8
+    ],
+    "silence": [
+      6.8,
+      7.0
+    ],
+    "flare_peak": 6.75
+  },
+  "portraits": {
+    "heroes": [
+      {
+        "who": "Rabbi Ovadia Yosef",
+        "suffix": "zt\"l",
+        "arrive": 7.0
+      },
+      {
+        "who": "Rabbi Joey Haber",
+        "suffix": "",
+        "arrive": 7.9
+      },
+      {
+        "who": "Rabbi Shlomo Farhi",
+        "suffix": "",
+        "arrive": 8.8
+      }
+    ],
+    "hero_in": 0.28,
+    "hold": 0.9,
+    "push": 0.06,
+    "card_width_frac": 0.72,
+    "flypast_t0": 9.7,
+    "flypast_t1": 11.0,
+    "title": {
+      "text": "Scroll Anytime",
+      "t": 10.3,
+      "px": 120
+    }
+  },
+  "h5": {
+    "ring": [
+      11.25,
+      12.25
+    ],
+    "flame": 12.3,
+    "particles": 20,
+    "day_roll": 12.65,
+    "from": "Day six",
+    "to": "Day seven"
+  },
+  "words": [
+    {
+      "text": "Free.",
+      "t": 14.0
+    },
+    {
+      "text": "No ads.",
+      "t": 14.75
+    },
+    {
+      "text": "Only Torah.",
+      "t": 15.5
+    }
+  ],
+  "endcard": {
+    "seal_press": 17.35,
+    "title_in": 17.15,
+    "badge_in": 17.35,
+    "bio_in": 17.5,
+    "title_px": 120,
+    "badge_w": 340,
+    "bio_px": 48,
+    "loop_fade": [
+      19.45,
+      20.0
+    ],
+    "type_out": [
+      19.2,
+      19.45
+    ]
+  },
+  "voice": {
+    "_": "Will take 1 lines. Absent in this session; the mixer drops them in when assets/voice/will_take1/<id>.wav exists.",
+    "lines": [
+      {
+        "id": "v1",
+        "t": 1.4,
+        "text": "You were going to scroll tonight anyway."
+      },
+      {
+        "id": "v2",
+        "t": 4.0,
+        "text": "So we changed what's on it."
+      },
+      {
+        "id": "v3",
+        "t": 8.0,
+        "text": "The rabbanim you grew up on. In your pocket."
+      },
+      {
+        "id": "v4",
+        "t": 11.6,
+        "text": "Every day."
+      },
+      {
+        "id": "v5",
+        "t": 14.2,
+        "text": "Scroll Anytime. Free. No ads. Only Torah."
+      }
+    ]
+  },
+  "music": {
+    "bpm": 120,
+    "free_time_until": 3.0,
+    "hit": 7.0,
+    "silence": [
+      6.8,
+      7.0
+    ]
+  },
+  "loudness": {
+    "lufs": -14.0,
+    "true_peak_db": -1.0
+  },
+  "cover_t": 8.0,
+  "cuts": {
+    "c12": [
+      [
+        0.0,
+        1.2
+      ],
+      [
+        3.0,
+        11.0
+      ],
+      [
+        17.2,
+        20.0
+      ]
+    ],
+    "c6": [
+      [
+        5.0,
+        8.8
+      ],
+      [
+        17.0,
+        19.2
+      ]
+    ],
+    "_": "c12 keeps the silence and the hit and loops (starts on frame 0, ends on the loop fade). c6 ends on the full end card, before its type fades."
+  },
+  "sfx_notes": "Word hits sit on the 120 BPM grid (dotted-quarter apart). With Will take 1 restored, re-sync them to the read of v5."
+}
