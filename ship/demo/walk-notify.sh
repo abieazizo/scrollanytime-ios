@@ -177,24 +177,35 @@ PY
   # 6. a real local notification: Profile → Reminders → Send a test, then the Home Screen
   tap "$PROFILE_X" "$NAVY" 3
   look "notify-08-profile"
+  # the row's words are "Send a test"; its button is the pill "Send" on the right (run 38576067448
+  # tapped the label, and nothing was sent). Find the row with the page at rest, then the pill.
   local found=""
-  for i in 1 2 3 4 5 6; do
-    if tap_text "send a test"; then found=1; break; fi
-    swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 3)) 0.3 1.2
+  for i in 1 2 3 4 5 6 7 8; do
+    sleep 1.5
+    shot "notify-08b-find"; ocr "notify-08b-find"
+    if sees notify-08b-find "send a test"; then found=1; break; fi
+    swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 2)) 0.4 1.5
   done
-  if [ -n "$found" ]; then
+  if [ -n "$found" ] && tap_text "send" --exact; then
     seg_start "notify-banners"
-    # the test fires in five seconds; a notification is not shown over the app in front, so leave it
+    # the test fires five seconds after the tap; nothing is shown over the app in front, so leave it
     idb ui button --udid "$UDID" HOME || true
-    sleep 7
-    look "notify-09-local-banner"
-    if sees notify-09-local-banner "what a reminder looks like|scroll anytime"; then
-      verdict PASS "a LOCAL notification from the app is on the Home Screen (Send a test)"
+    local banner=""
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      sleep 1
+      shot "notify-09-local-banner"; ocr "notify-09-local-banner"
+      if sees notify-09-local-banner "what a reminder looks like"; then banner=1; break; fi
+    done
+    say_n "    notify-09-local-banner: $(tr '
+' ' ' < "$OUT/ocr/notify-09-local-banner.txt" 2>/dev/null | tr -s ' ' | cut -c1-200)"
+    if [ -n "$banner" ]; then
+      verdict PASS "a LOCAL notification from the app is on the Home Screen: \"This is what a reminder looks like\""
     else
-      verdict FAIL "no banner after Send a test (see notify-09-local-banner)"
+      verdict FAIL "no local banner within 10 s of Send (see notify-09-local-banner)"
     fi
+    xcrun simctl spawn "$UDID" log show --last 1m --style compact --predicate 'eventMessage CONTAINS "asked: test"' 2>/dev/null       | grep -q "asked: test" && say_n "    the shell's log: the page asked for the test notification"       || say_n "    the shell's log: NO test request from the page"
   else
-    verdict FAIL "Profile shows no \"Send a test\" (see notify-08-profile)"
+    verdict FAIL "Profile shows no Send a test row with its Send pill (see notify-08b-find)"
     seg_start "notify-banners"
     idb ui button --udid "$UDID" HOME || true
   fi
