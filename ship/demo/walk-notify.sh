@@ -175,11 +175,13 @@ PY
   # the row's words are "Send a test"; its button is the pill "Send" on the right (run 38576067448
   # tapped the label, and nothing was sent). Find the row with the page at rest, then the pill.
   local found=""
-  for i in 1 2 3 4 5 6 7 8; do
+  # (run 38588988681 reached REMINDERS after eight quarter-screen swipes and stopped one screen short:
+  # the row sits below Shabbat & Yom Tov — swipe most of a screen at a time, and keep going)
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
     sleep 1.5
     shot "notify-08b-find"; ocr "notify-08b-find"
     if sees notify-08b-find "send a test"; then found=1; break; fi
-    swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 2)) 0.4 1.5
+    swipe "$MID_X" $((H * 4 / 5)) "$MID_X" $((H / 5)) 0.3 1.5
   done
   if [ -n "$found" ] && tap_text "send" --exact; then
     seg_start "notify-banners"
