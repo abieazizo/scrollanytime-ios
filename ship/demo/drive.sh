@@ -110,9 +110,9 @@ for attempt in 1 2 3; do
   echo "  !! $BUNDLE not up (attempt $attempt) - launching it directly"
   xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 done
-# the sign-in walk relaunches the app itself, so a flaky "in front" reading is not the end of it
+# the sign-in and notify walks relaunch the app themselves, so a flaky "in front" reading is not the end of it
 # there (run 38112671754: "is running", then "could not get … to the front", and the walk never ran)
-front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; [ -f ship/demo/walk-signin ] || exit 1; }
+front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; [ -f ship/demo/walk-signin ] || [ -f ship/demo/walk-notify ] || exit 1; }
 
 shot 01-launched
 sleep 5
