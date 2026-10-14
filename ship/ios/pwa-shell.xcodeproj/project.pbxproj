@@ -18,10 +18,22 @@
 		5A51A0012026091400000001 /* SignInWithApple.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0002026091400000001 /* SignInWithApple.swift */; };
 		5A51A0032026092500000003 /* NotifyBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0022026092500000002 /* NotifyBridge.swift */; };
 		5A51A0052026100800000005 /* DeviceId.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0042026100800000004 /* DeviceId.swift */; };
+		5A51A0062026101400000006 /* SaveToPhotos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0072026101400000007 /* SaveToPhotos.swift */; };
+		5A51A0112026101400000011 /* SaveToPhotosUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0102026101400000010 /* SaveToPhotosUITests.swift */; };
 		595F23AF25CEFBFE0053416C /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595F23A425CEFBFE0053416C /* WebView.swift */; };
 		CDC0FE292388222C002C8D56 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CDC0FE252388222B002C8D56 /* Main.storyboard */; };
 		CDC0FE2A2388222C002C8D56 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CDC0FE272388222B002C8D56 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5A51A0172026101400000017 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CD89F881237E9D9200C436A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CD89F888237E9D9200C436A1;
+			remoteInfo = "pwa-shell";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		59333BAA25CFF706003392A4 /* PWAShell.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PWAShell.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,6 +49,9 @@
 		5A51A0002026091400000001 /* SignInWithApple.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SignInWithApple.swift; path = "pwa-shell/SignInWithApple.swift"; sourceTree = "<group>"; };
 		5A51A0022026092500000002 /* NotifyBridge.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = NotifyBridge.swift; path = "pwa-shell/NotifyBridge.swift"; sourceTree = "<group>"; };
 		5A51A0042026100800000004 /* DeviceId.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DeviceId.swift; path = "pwa-shell/DeviceId.swift"; sourceTree = "<group>"; };
+		5A51A0072026101400000007 /* SaveToPhotos.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SaveToPhotos.swift; path = "pwa-shell/SaveToPhotos.swift"; sourceTree = "<group>"; };
+		5A51A0102026101400000010 /* SaveToPhotosUITests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SaveToPhotosUITests.swift; path = "pwa-shellUITests/SaveToPhotosUITests.swift"; sourceTree = "<group>"; };
+		5A51A0122026101400000012 /* pwa-shellUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "pwa-shellUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		595F23A425CEFBFE0053416C /* WebView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = WebView.swift; path = "pwa-shell/WebView.swift"; sourceTree = "<group>"; };
 		CDC0FE262388222B002C8D56 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = "pwa-shell/Base.lproj/Main.storyboard"; sourceTree = "<group>"; };
 		CDC0FE282388222B002C8D56 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = "pwa-shell/Base.lproj/LaunchScreen.storyboard"; sourceTree = "<group>"; };
@@ -44,6 +59,13 @@
 
 /* Begin PBXFrameworksBuildPhase section */
 		CD89F886237E9D9200C436A1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A51A0152026101400000015 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -71,6 +93,7 @@
 				5A51A0002026091400000001 /* SignInWithApple.swift */,
 				5A51A0022026092500000002 /* NotifyBridge.swift */,
 				5A51A0042026100800000004 /* DeviceId.swift */,
+				5A51A0072026101400000007 /* SaveToPhotos.swift */,
 				595F239F25CEFBFE0053416C /* PushNotifications.swift */,
 				595F239D25CEFBFD0053416C /* SceneDelegate.swift */,
 				595F239A25CEFBFD0053416C /* Settings.swift */,
@@ -79,8 +102,18 @@
 				CDC0FE252388222B002C8D56 /* Main.storyboard */,
 				595F23A425CEFBFE0053416C /* WebView.swift */,
 				90E46E861CB86F5FAF46BED9 /* Frameworks */,
+				5A51A0132026101400000013 /* pwa-shellUITests */,
 				59333BAA25CFF706003392A4 /* PWAShell.app */,
+				5A51A0122026101400000012 /* pwa-shellUITests.xctest */,
 			);
+			sourceTree = "<group>";
+		};
+		5A51A0132026101400000013 /* pwa-shellUITests */ = {
+			isa = PBXGroup;
+			children = (
+				5A51A0102026101400000010 /* SaveToPhotosUITests.swift */,
+			);
+			name = "pwa-shellUITests";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -103,6 +136,24 @@
 			productReference = 59333BAA25CFF706003392A4 /* PWAShell.app */;
 			productType = "com.apple.product-type.application";
 		};
+		5A51A0192026101400000019 /* pwa-shellUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A51A01C202610140000001C /* Build configuration list for PBXNativeTarget "pwa-shellUITests" */;
+			buildPhases = (
+				5A51A0142026101400000014 /* Sources */,
+				5A51A0152026101400000015 /* Frameworks */,
+				5A51A0162026101400000016 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5A51A0182026101400000018 /* PBXTargetDependency */,
+			);
+			name = "pwa-shellUITests";
+			productName = "pwa-shellUITests";
+			productReference = 5A51A0122026101400000012 /* pwa-shellUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -116,6 +167,10 @@
 					CD89F888237E9D9200C436A1 = {
 						CreatedOnToolsVersion = 11.2.1;
 						LastSwiftMigration = 1120;
+					};
+					5A51A0192026101400000019 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = CD89F888237E9D9200C436A1;
 					};
 				};
 			};
@@ -133,6 +188,7 @@
 			projectRoot = "";
 			targets = (
 				CD89F888237E9D9200C436A1 /* pwa-shell */,
+				5A51A0192026101400000019 /* pwa-shellUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -146,6 +202,13 @@
 				CDC0FE292388222C002C8D56 /* Main.storyboard in Resources */,
 				CDC0FE2A2388222C002C8D56 /* LaunchScreen.storyboard in Resources */,
 				595F23A725CEFBFE0053416C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A51A0162026101400000016 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -166,13 +229,30 @@
 				5A51A0012026091400000001 /* SignInWithApple.swift in Sources */,
 				5A51A0032026092500000003 /* NotifyBridge.swift in Sources */,
 				5A51A0052026100800000005 /* DeviceId.swift in Sources */,
+				5A51A0062026101400000006 /* SaveToPhotos.swift in Sources */,
 				595F23AC25CEFBFE0053416C /* ViewController.swift in Sources */,
 				595F23AA25CEFBFE0053416C /* PushNotifications.swift in Sources */,
 				595F23AF25CEFBFE0053416C /* WebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A51A0142026101400000014 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A51A0112026101400000011 /* SaveToPhotosUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5A51A0182026101400000018 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CD89F888237E9D9200C436A1 /* pwa-shell */;
+			targetProxy = 5A51A0172026101400000017 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		CDC0FE252388222B002C8D56 /* Main.storyboard */ = {
@@ -330,7 +410,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.1.3;
 				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scrollanytime.app";
 				PRODUCT_NAME = "Scroll Anytime";
@@ -357,7 +437,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.1.3;
 				CURRENT_PROJECT_VERSION = 1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.scrollanytime.app";
 				PRODUCT_NAME = "Scroll Anytime";
@@ -365,6 +445,50 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1";
+			};
+			name = Release;
+		};
+		5A51A01A202610140000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The Save to Photos test reads the library to prove a saved clip arrived.";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.scrollanytime.app.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+				TEST_TARGET_NAME = "pwa-shell";
+			};
+			name = Debug;
+		};
+		5A51A01B202610140000001B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "The Save to Photos test reads the library to prove a saved clip arrived.";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "com.scrollanytime.app.uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1";
+				TEST_TARGET_NAME = "pwa-shell";
 			};
 			name = Release;
 		};
@@ -385,6 +509,15 @@
 			buildConfigurations = (
 				CD89F89E237E9D9300C436A1 /* Debug */,
 				CD89F89F237E9D9300C436A1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5A51A01C202610140000001C /* Build configuration list for PBXNativeTarget "pwa-shellUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A51A01A202610140000001A /* Debug */,
+				5A51A01B202610140000001B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

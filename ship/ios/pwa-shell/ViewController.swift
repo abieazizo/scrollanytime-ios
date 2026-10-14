@@ -220,7 +220,7 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     
     @objc func loadRootUrl(cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy) {
         armLoadingPage()
-        PWAShell.webView.load(URLRequest(url: SceneDelegate.universalLinkToLaunch ?? SceneDelegate.shortcutLinkToLaunch ?? rootUrl, cachePolicy: cachePolicy))
+        PWAShell.webView.load(URLRequest(url: SceneDelegate.universalLinkToLaunch ?? SceneDelegate.shortcutLinkToLaunch ?? UITestHooks.startURL ?? rootUrl, cachePolicy: cachePolicy))
     }
 
     // MARK: - the loading page
@@ -554,6 +554,10 @@ extension ViewController: WKScriptMessageHandler {
         if message.name == "snap" {
             // Report a problem: the screen as it is, before the sheet (NotifyBridge.swift ReportBridge)
             ReportBridge.snapshot(message)
+        }
+        if message.name == "saveToPhotos" {
+            // Save to Photos: download natively, add-only access, into the camera roll (SaveToPhotos.swift)
+            SaveToPhotos.handle(message)
         }
   }
 }

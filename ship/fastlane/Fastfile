@@ -60,9 +60,22 @@ platform :ios do
     )
   end
 
+  # ── the Save to Photos gate ──────────────────────────────────────────────────────────────────
+  # The owner's spec of 2026-10-14: the XCUITest must pass before anything is uploaded. On the Simulator,
+  # against the live site, the real shell saves a feed clip into Photos three ways — first-time permission,
+  # already granted, denied (the Settings sheet) — and the test reads the library afterwards
+  # (ship/ios/uitest-photos.sh, ship/ios/pwa-shellUITests/SaveToPhotosUITests.swift). `signing` is the
+  # first lane release-ios.yml runs on an upload, so the gate sits at its head: a failure ends the run
+  # before a certificate is minted, an archive is made or a byte goes to App Store Connect.
+  desc 'Save to Photos: the XCUITest on the Simulator, three paths (the release gate)'
+  lane :uitest_photos do
+    sh('bash', File.join(IOS_DIR, 'uitest-photos.sh'))
+  end
+
   # ── signing ──────────────────────────────────────────────────────────────────────────────────
   desc 'Create the distribution certificate and App Store profile on this runner'
   lane :signing do
+    uitest_photos
     asc_key
     # A distribution certificate for App Store builds. On a fresh runner there is none, so cert
     # creates one; on a re-run it finds the existing one and downloads it into the keychain.

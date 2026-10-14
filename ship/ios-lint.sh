@@ -38,7 +38,6 @@ BANNED_PLIST=(
   NSCameraUsageDescription
   NSMicrophoneUsageDescription
   NSPhotoLibraryUsageDescription
-  NSPhotoLibraryAddUsageDescription
   NSLocationWhenInUseUsageDescription
   NSLocationAlwaysAndWhenInUseUsageDescription
   NSLocationAlwaysUsageDescription
@@ -80,6 +79,19 @@ done
 [ "$entfail" -eq 0 ] && ok "entitlements declare none of the ${#BANNED_ENT[@]} banned keys"
 grep -q "<key>aps-environment</key>" "$ENT" && ok "entitlements declare aps-environment (remote push on)" || warn "no aps-environment yet: local reminders work, remote pushes wait for the Push Notifications capability + APNs key (Entitlements.plist note)"
 grep -q 'name: "notify"' ship/ios/pwa-shell/WebView.swift && ok "WebView registers the notify bridge" || bad "WebView.swift does not register the notify handler"
+# SAVE TO PHOTOS (2026-10-14): add-only access, the owner's words, and the bridge that uses it. The FULL
+# library key (NSPhotoLibraryUsageDescription) stays banned above: the app never reads Photos.
+if grep -A1 "<key>NSPhotoLibraryAddUsageDescription</key>" "$PLIST" | grep -q "<string>Save Torah clips to your Photos.</string>"; then
+  ok "NSPhotoLibraryAddUsageDescription = \"Save Torah clips to your Photos.\" (add-only, for Save to Photos)"
+else
+  bad "NSPhotoLibraryAddUsageDescription must be \"Save Torah clips to your Photos.\" — without it iOS cannot ask, and the share sheet has no Save Video"
+fi
+grep -q 'name: "saveToPhotos"' "$WEBVIEW" && grep -q 'message.name == "saveToPhotos"' "$VC" && [ -f ship/ios/pwa-shell/SaveToPhotos.swift ] \
+  && ok "the saveToPhotos bridge is registered, handled and present" \
+  || bad "the saveToPhotos bridge must be registered in WebView.swift, handled in ViewController.swift, and SaveToPhotos.swift present"
+grep -q 'authorizationStatus(for: .addOnly)' ship/ios/pwa-shell/SaveToPhotos.swift && ! grep -q 'for: .readWrite' ship/ios/pwa-shell/SaveToPhotos.swift \
+  && ok "Photos access is asked add-only, never read-write" \
+  || bad "SaveToPhotos.swift must ask for .addOnly and never .readWrite"
 [ -f ship/ios/pwa-shell/NotifyBridge.swift ] && ok "NotifyBridge.swift present" || bad "NotifyBridge.swift missing"
 
 # ── 2. required keys ───────────────────────────────────────────────────────────────────────

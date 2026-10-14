@@ -45,7 +45,20 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // picture taken before the report sheet comes up.
     ReportBridge.start()
     userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, \(ReportBridge.shellFields()));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    // THE NOTIFY WALK (2026-10-14, Simulator only): `-saSeed <base64 JSON>` writes those storage
+    // entries before the page's first script (ReportBridge.seedScript). Dormant on every install.
+    if let seed = ReportBridge.seedScript() {
+        userContentController.addUserScript(WKUserScript(source: seed, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
     userContentController.add(WKSMH, name: "snap")
+    // SAVE TO PHOTOS (2026-10-14, SaveToPhotos.swift): one tap downloads the clip natively and writes it
+    // into the camera roll — no share sheet. `photos: 1` tells the page before its first script.
+    userContentController.add(WKSMH, name: "saveToPhotos")
+    userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, { photos: 1 });", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    // the XCUITest's storage (dormant without -saUITest, SaveToPhotos.swift UITestHooks)
+    if let setup = UITestHooks.documentStartScript() {
+        userContentController.addUserScript(WKUserScript(source: setup, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
     // THE LAUNCH: two haptics — a soft impact when the tile snaps crisp, a light tick when the
     // last letter of the name closes. The web layer posts { style: "soft" | "light" }; where this
     // bridge is absent (Safari, the PWA) the web layer stays silent — never navigator.vibrate.
@@ -104,6 +117,9 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // ?app=ios, never from the user agent.
     webView.configuration.applicationNameForUserAgent = "Safari/604.1"
     webView.customUserAgent = "Mozilla/5.0 (\(deviceModel); CPU \(deviceModel) OS \(osVersion.replacingOccurrences(of: ".", with: "_")) like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(osVersion) Mobile/15E148 Safari/604.1"
+    // under its XCUITest the shell says so, or Ops would count the test's guest as a person
+    // (worker/src/domain/ops.ts SUITE_UAS)
+    if UITestHooks.on { webView.customUserAgent = (webView.customUserAgent ?? "") + " SAUITest" }
 
     // (estimatedProgress is observed ONCE, by ViewController.initWebView — a second registration
     // here fired every progress change twice, and only one was ever removed)

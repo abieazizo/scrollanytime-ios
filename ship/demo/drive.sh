@@ -35,6 +35,23 @@ RAIL_X=$(fx 0.9008); SAVE_Y=$(fy 0.5668)
 MID_X=$((W / 2)); MID_Y=$((H / 2))
 echo "nav y=$NAVY  tabs: feed=$FEED_X torah=$TORAH_X rabbis=$RABBIS_X profile=$PROFILE_X"
 
+# THE SAVE TO PHOTOS GATE, on a mirror branch (2026-10-14): with the marker ship/demo/walk-photos present,
+# the walk is the XCUITest (ship/ios/uitest-photos.sh) on this Simulator — the very run the release's
+# signing lane gates on — and nothing else. Nothing is signed or uploaded from this workflow. Results go
+# where the workflow uploads them: screenshots under shots/, the summary and each path's log under ax/.
+if [ -f ship/demo/walk-photos ]; then
+  mkdir -p "$OUT/ax" "$OUT/shots"
+  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-photos.sh
+  code=$?
+  cp "$OUT"/uitest/*.png "$OUT/shots/" 2>/dev/null || true
+  cp "$OUT/uitest/summary.json" "$OUT/ax/uitest-summary.json" 2>/dev/null || true
+  for f in "$OUT"/uitest/*.log; do
+    [ -f "$f" ] || continue
+    python3 -c "import json,sys; print(json.dumps({'log': open(sys.argv[1], errors='replace').read()[-80000:]}))" "$f" > "$OUT/ax/uitest-$(basename "$f" .log).json"
+  done
+  exit $code
+fi
+
 
 # -- naming things instead of pointing at them --------------------------------------------------
 AX="$OUT/ax"; mkdir -p "$AX"
@@ -110,7 +127,9 @@ for attempt in 1 2 3; do
   echo "  !! $BUNDLE not up (attempt $attempt) - launching it directly"
   xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 done
-front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; exit 1; }
+# the sign-in and notify walks relaunch the app themselves, so a flaky "in front" reading is not the end of it
+# there (run 38112671754: "is running", then "could not get … to the front", and the walk never ran)
+front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; [ -f ship/demo/walk-signin ] || [ -f ship/demo/walk-notify ] || exit 1; }
 
 shot 01-launched
 sleep 5
@@ -144,6 +163,21 @@ fi
 CONTINUE_Y="${CONTINUE_Y:-$(fy 0.903)}"
 axdump 01-landing
 
+# ── THE NOTIFY WALK (2026-10-14) ──────────────────────────────────────────────────────────────
+# With the marker file ship/demo/walk-notify present: the reminder ask end to end in this build
+# against the live site — the card, the iOS system prompt, Allow, a local notification, a push
+# (ship/demo/walk-notify.sh). Best effort: a failed step is a finding in crash/notify.txt.
+if [ -f ship/demo/walk-notify ]; then
+  set +e
+  . ship/demo/walk-signin.sh
+  . ship/demo/walk-notify.sh
+  shot "notify-00-welcome"; ocr "notify-00-welcome"
+  notify_walk
+  cat "$NOTE" 2>/dev/null
+  echo "notify walk finished"
+  exit 0
+fi
+
 # ── THE SIGN-IN WALK (2026-10-10) ─────────────────────────────────────────────────────────────
 # With the marker file ship/demo/walk-signin present: what Continue with Google and Sign in with
 # Apple do in THIS build, then — when the tree carries ship/ios-before — in that shell too (the
@@ -154,6 +188,8 @@ if [ -f ship/demo/walk-signin ]; then
   . ship/demo/walk-signin.sh
   signin_walk now
   selftest_walk
+  # the device and state matrix runs on the CURRENT build, before the old shell replaces it
+  [ -f ship/demo/walk-matrix ] && matrix_walk
   if install_before; then signin_walk before; else echo "  (no before shell in this tree)"; fi
   cat "$OUT"/signin-*.txt 2>/dev/null
   echo "sign-in walk finished"

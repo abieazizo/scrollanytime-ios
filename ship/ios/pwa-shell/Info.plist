@@ -17,7 +17,8 @@
     NSLocation*UsageDescription                              — there is no location code in the
                                                                product at all (Shabbat mode was
                                                                deleted product-wide)
-    NSPhotoLibrary* / NSContacts*                            — never read
+    NSPhotoLibraryUsageDescription / NSContacts*             — never read (Save to Photos is ADD-ONLY:
+                                                               NSPhotoLibraryAddUsageDescription below)
     UIBackgroundModes                                        — Listen Mode ships screen-on; a
                                                                declared-but-unused audio mode is
                                                                the textbook 2.5.4 rejection
@@ -57,6 +58,11 @@
 	<string>public.app-category.education</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- SAVE TO PHOTOS (the owner's spec of 2026-10-14): "Save to Photos" writes a clip into the camera
+	     roll with add-only access (SaveToPhotos.swift). Without this key iOS cannot ask at all, and the
+	     share sheet leaves out "Save Video". Add-only: the app never reads the library. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save Torah clips to your Photos.</string>
 	<!-- iPhone only. An iPad still opens it in compatibility mode; the app's centered-column rule
 	     handles that and is asserted by scripts/launch-check.mjs. -->
 	<key>UIDeviceFamily</key>

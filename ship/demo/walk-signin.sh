@@ -85,6 +85,37 @@ relaunch() {
 }
 say() { echo "[$1] $2" | tee -a "$OUT/signin-$1.txt"; }
 
+# SHORT RECORDINGS OF THE MOMENTS THAT MATTER (calibrate mode only — the workflow's own recording is
+# off then): run 38110569242's full-length recording was 3.2 GB, too big to take home. Each segment
+# is recorded here, shrunk on the runner (390 wide, 15 fps) and kept under crash/, which the
+# workflow uploads whatever it holds.
+SEG_PID=""
+seg_start() {
+  [ "${MODE:-}" = "calibrate" ] || return 0
+  mkdir -p "$OUT/crash"
+  xcrun simctl io "$UDID" recordVideo --codec h264 --force "$OUT/.seg-$1.mov" >/dev/null 2>&1 &
+  SEG_PID=$!
+  sleep 3
+}
+seg_stop() {
+  [ -n "$SEG_PID" ] || return 0
+  sleep 1
+  kill -INT "$SEG_PID" 2>/dev/null || true
+  wait "$SEG_PID" 2>/dev/null || true
+  SEG_PID=""
+  # the runner has ffprobe but no ffmpeg (run 38113306596); macOS's own avconvert re-encodes to H.264
+  if command -v ffmpeg >/dev/null 2>&1 && ffmpeg -v error -y -i "$OUT/.seg-$1.mov" -vf "scale=390:-2,fps=15" -c:v libx264 -crf 30 -preset veryfast -pix_fmt yuv420p -an "$OUT/crash/recording-$1.mp4"; then
+    :
+  elif avconvert --preset PresetMediumQuality --source "$OUT/.seg-$1.mov" --output "$OUT/crash/recording-$1.mp4" --replace >/dev/null 2>&1; then
+    :
+  else
+    # nothing to shrink it with: keep it as it was recorded
+    mv "$OUT/.seg-$1.mov" "$OUT/crash/recording-$1.mov"
+  fi
+  for f in "$OUT/crash/recording-$1".*; do [ -f "$f" ] && echo "  recording kept: crash/$(basename "$f") ($(du -h "$f" | cut -f1))"; done
+  rm -f "$OUT/.seg-$1.mov"
+}
+
 signin_walk() {
   local L="$1"
   echo "── sign-in walk: $L ──" | tee -a "$OUT/signin-$L.txt"
@@ -92,6 +123,7 @@ signin_walk() {
   shot "$L-10-welcome"; read_screen "$L-10-welcome" "$L"
 
   # ── Google ──
+  seg_start "$L-google"
   if ! tap_text "continue with google"; then
     say "$L" "the welcome card shows no Continue with Google (see $L-10-welcome)"
   else
@@ -138,8 +170,10 @@ signin_walk() {
     fi
   fi
 
+  seg_stop "$L-google"
   # ── Apple ── (the system sheet; the Simulator has no Apple Account, so it asks for one — dismiss it)
   relaunch
+  seg_start "$L-apple"
   shot "$L-20-welcome-again"; read_screen "$L-20-welcome-again" "$L"
   if tap_text "sign in with apple"; then
     sleep 5
@@ -150,6 +184,7 @@ signin_walk() {
   else
     say "$L" "the welcome card shows no Sign in with Apple"
   fi
+  seg_stop "$L-apple"
 }
 
 # build ship/ios-before (when the tree carries it) with the newest installed Xcode that still
@@ -193,11 +228,13 @@ selftest_walk() {
   sleep 2
   xcrun simctl launch "$UDID" com.scrollanytime.app -saSelfTest >/dev/null 2>&1 || true
   sleep 26
+  seg_start "selftest-shake"
   shot "selftest-10-launched"
   # the Simulator's own shake (Device → Shake) is this Darwin notification
   xcrun simctl notify_post "$UDID" com.apple.UIKit.SimulatorShake || true
   sleep 4
   shot "selftest-11-after-shake"
+  seg_stop "selftest-shake"
   local c
   c=$(xcrun simctl get_app_container "$UDID" com.scrollanytime.app data 2>/dev/null || true)
   if [ -n "$c" ] && [ -f "$c/tmp/sa-selftest-snap.jpg" ]; then
@@ -210,3 +247,90 @@ selftest_walk() {
   python3 -c "import json,sys; print(json.dumps({'lines': open(sys.argv[1], encoding='utf-8', errors='replace').read().splitlines()}))" "$OUT/signin-selftest.txt" > "$OUT/ax/selftest.json" 2>/dev/null || true
 }
 
+
+# THE DEVICE AND STATE MATRIX (the owner's spec of 2026-10-10, Part 2.3), as far as the Simulator
+# goes: cold, warm and resumed launches; Dynamic Type at the largest accessibility size; Reduce
+# Motion; the light appearance; and every other iOS runtime the runner carries. The Simulator has no
+# Low Power Mode and no VoiceOver — the matrix says so rather than pretending. Each state: the app
+# relaunched under it, screenshots, and the screen's words (OCR) in signin-matrix.txt.
+matrix_shot() {
+  local name="$1"
+  shot "$name"
+  ocr "$name"
+  python3 - "$OUT/ocr/$name.txt" "$name" <<'PY' | tee -a "$OUT/signin-matrix.txt"
+import sys
+text = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+low = text.lower()
+seen = [k for k, v in {
+  'welcome card': 'endless torah' in low,
+  'Sign in with Apple': 'sign in with apple' in low,
+  'Continue with Google': 'continue with google' in low,
+  'Continue with email': 'continue with email' in low,
+  'offline page': 'connection' in low and ('needs' in low or 'retry' in low),
+}.items() if v]
+print(f"[matrix] {sys.argv[2]}: {', '.join(seen) or 'none of the welcome card'} | " + ' / '.join(l.strip() for l in text.splitlines() if l.strip())[:160])
+PY
+}
+relaunch_quiet() {
+  xcrun simctl terminate "$UDID" com.scrollanytime.app >/dev/null 2>&1 || true
+  sleep 2
+  xcrun simctl launch "$UDID" com.scrollanytime.app >/dev/null 2>&1 || true
+}
+
+matrix_walk() {
+  echo "── device and state matrix ──" | tee -a "$OUT/signin-matrix.txt"
+  # cold: from nothing, three moments of the launch
+  relaunch_quiet
+  sleep 2; matrix_shot "matrix-01-cold-2s"
+  sleep 4; matrix_shot "matrix-02-cold-6s"
+  sleep 8; matrix_shot "matrix-03-cold-14s"
+  # warm: to the Home Screen and straight back
+  idb ui button --udid "$UDID" HOME || true
+  sleep 5
+  xcrun simctl launch "$UDID" com.scrollanytime.app >/dev/null 2>&1 || true
+  sleep 3; matrix_shot "matrix-04-warm"
+  # resumed: a minute in the background
+  idb ui button --udid "$UDID" HOME || true
+  sleep 60
+  xcrun simctl launch "$UDID" com.scrollanytime.app >/dev/null 2>&1 || true
+  sleep 4; matrix_shot "matrix-05-resumed-after-60s"
+  # Dynamic Type, the largest accessibility size
+  xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large || true
+  relaunch_quiet; sleep 14; matrix_shot "matrix-06-dynamic-type-xxxl"
+  xcrun simctl ui "$UDID" content_size large || true
+  # Reduce Motion (the launch film's reduced cut)
+  xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEnabled -bool true || true
+  relaunch_quiet; sleep 3; matrix_shot "matrix-07-reduce-motion-3s"
+  sleep 9; matrix_shot "matrix-08-reduce-motion-12s"
+  xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEnabled -bool false || true
+  # the light appearance (the app is dark by design; nothing may turn white)
+  xcrun simctl ui "$UDID" appearance light || true
+  relaunch_quiet; sleep 14; matrix_shot "matrix-09-light-appearance"
+  xcrun simctl ui "$UDID" appearance dark || true
+  echo "[matrix] Low Power Mode: the Simulator has none — not run" | tee -a "$OUT/signin-matrix.txt"
+  echo "[matrix] VoiceOver: the Simulator has none — not run" | tee -a "$OUT/signin-matrix.txt"
+  # every other iPhone runtime this runner carries: the same build, a new device
+  local app booted_rt rt dev
+  app="$(find ship/build/sim/Build/Products -maxdepth 2 -name '*.app' | head -1)"
+  booted_rt=$(xcrun simctl list devices booted -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((k for k,v in d.items() if v), ''))")
+  for rt in $(xcrun simctl list runtimes -j | python3 -c "
+import json,sys
+for r in json.load(sys.stdin)['runtimes']:
+    if r.get('isAvailable') and r.get('platform','iOS')=='iOS' and r['identifier'] != sys.argv[1]: print(r['identifier'])" "$booted_rt" | sort -rV | head -2); do
+    dev=$(xcrun simctl create "matrix-$(basename "$rt")" "com.apple.CoreSimulator.SimDeviceType.iPhone-15" "$rt" 2>/dev/null || true)
+    [ -n "$dev" ] || { echo "[matrix] $rt: could not create an iPhone 15 on it" | tee -a "$OUT/signin-matrix.txt"; continue; }
+    xcrun simctl boot "$dev" >/dev/null 2>&1 || true
+    xcrun simctl bootstatus "$dev" -b >/dev/null 2>&1 || true
+    if xcrun simctl install "$dev" "$app" 2>/dev/null; then
+      xcrun simctl launch "$dev" com.scrollanytime.app >/dev/null 2>&1 || true
+      sleep 20
+      xcrun simctl io "$dev" screenshot "$OUT/shots/matrix-10-$(basename "$rt").png" >/dev/null 2>&1 || true
+      ocr "matrix-10-$(basename "$rt")"
+      echo "[matrix] $(basename "$rt"): $(tr '\n' ' ' < "$OUT/ocr/matrix-10-$(basename "$rt").txt" | cut -c1-160)" | tee -a "$OUT/signin-matrix.txt"
+    else
+      echo "[matrix] $rt: the build would not install" | tee -a "$OUT/signin-matrix.txt"
+    fi
+    xcrun simctl shutdown "$dev" >/dev/null 2>&1 || true
+  done
+  python3 -c "import json,sys; print(json.dumps({'lines': open(sys.argv[1], encoding='utf-8', errors='replace').read().splitlines()}))" "$OUT/signin-matrix.txt" > "$OUT/ax/matrix.json" 2>/dev/null || true
+}
