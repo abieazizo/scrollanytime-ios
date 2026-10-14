@@ -183,9 +183,12 @@ PY
     if sees notify-08b-find "send a test"; then found=1; break; fi
     swipe "$MID_X" $((H * 4 / 5)) "$MID_X" $((H / 5)) 0.3 1.5
   done
+  # the recorder takes ~3 s to start, and the test fires five seconds after the tap — with nothing
+  # shown while the app is in front (AppDelegate willPresent → []). Run 38591947765 started the
+  # recorder AFTER the tap and pressed Home ~9 s later: the notification had already come and gone
+  # unseen. So: film first, then tap Send and leave for the Home Screen at once.
+  [ -n "$found" ] && seg_start "notify-banners"
   if [ -n "$found" ] && tap_text "send" --exact; then
-    seg_start "notify-banners"
-    # the test fires five seconds after the tap; nothing is shown over the app in front, so leave it
     idb ui button --udid "$UDID" HOME || true
     local banner=""
     for i in 1 2 3 4 5 6 7 8 9 10; do
@@ -202,7 +205,7 @@ PY
     xcrun simctl spawn "$UDID" log show --last 1m --style compact --predicate 'eventMessage CONTAINS "asked: test"' 2>/dev/null       | grep -q "asked: test" && say_n "    the shell's log: the page asked for the test notification"       || say_n "    the shell's log: NO test request from the page"
   else
     verdict FAIL "Profile shows no Send a test row with its Send pill (see notify-08b-find)"
-    seg_start "notify-banners"
+    [ -z "$found" ] && seg_start "notify-banners"
     idb ui button --udid "$UDID" HOME || true
   fi
   sleep 6
