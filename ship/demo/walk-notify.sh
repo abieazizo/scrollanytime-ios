@@ -90,30 +90,25 @@ PY
   look "notify-02-feed-40s"
   sleep 28
   look "notify-03-feed-68s"
-  # the clip end: a swipe up to the next clip, as a person moves on
+  # the clip end: a swipe up to the next clip, as a person moves on. A swipe the Simulator drops (run
+  # 38581512053: an overloaded runner, the same clip on screen five minutes later) is no clip end, so
+  # each attempt is a swipe and a short look for the card; no card, the next attempt swipes again —
+  # every clip end after the first minute is one where the card must come up.
   seg_start "notify-ask"
-  swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 4)) 0.18 0.4
-
-  # 3. the card
-  local i up=""
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-    shot "notify-04-card"; ocr "notify-04-card"
-    if sees notify-04-card "remind me at"; then up=1; break; fi
-    sleep 1.5
+  local i a up=""
+  for a in 1 2 3 4; do
+    swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 5)) 0.35 0.6
+    for i in 1 2 3 4 5; do
+      shot "notify-04-card"; ocr "notify-04-card"
+      if sees notify-04-card "remind me at"; then up=1; break; fi
+      sleep 1
+    done
+    [ -n "$up" ] && { say_n "    the card came up after swipe $a"; break; }
+    say_n "    swipe $a: no card yet — $(tr '\n' ' ' < "$OUT/ocr/notify-04-card.txt" 2>/dev/null | tr -s ' ' | cut -c1-120)"
+    sleep 4
   done
   say_n "    notify-04-card: $(tr '\n' ' ' < "$OUT/ocr/notify-04-card.txt" 2>/dev/null | tr -s ' ' | cut -c1-200)"
-  if [ -z "$up" ]; then
-    verdict FAIL "the reminder card did not come up within 18 s of the clip end that made the day count"
-    # one more clip end, in case the first swipe landed before the minute was in
-    sleep 8
-    swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 4)) 0.18 0.4
-    for i in 1 2 3 4 5 6 7 8; do
-      shot "notify-04b-card"; ocr "notify-04b-card"
-      if sees notify-04b-card "remind me at"; then up=1; cp "$OUT/shots/notify-04b-card.png" "$OUT/shots/notify-04-card.png"; cp "$OUT/ocr/notify-04b-card.txt" "$OUT/ocr/notify-04-card.txt"; break; fi
-      sleep 1.5
-    done
-    [ -n "$up" ] && verdict PASS "the reminder card came up at the NEXT clip end"
-  fi
+  [ -z "$up" ] && verdict FAIL "the reminder card did not come up at any of four clip ends after the first minute"
   if [ -z "$up" ]; then
     look "notify-04c-no-card"
     seg_stop "notify-ask"
@@ -196,8 +191,7 @@ PY
       shot "notify-09-local-banner"; ocr "notify-09-local-banner"
       if sees notify-09-local-banner "what a reminder looks like"; then banner=1; break; fi
     done
-    say_n "    notify-09-local-banner: $(tr '
-' ' ' < "$OUT/ocr/notify-09-local-banner.txt" 2>/dev/null | tr -s ' ' | cut -c1-200)"
+    say_n "    notify-09-local-banner: $(tr '\n' ' ' < "$OUT/ocr/notify-09-local-banner.txt" 2>/dev/null | tr -s ' ' | cut -c1-200)"
     if [ -n "$banner" ]; then
       verdict PASS "a LOCAL notification from the app is on the Home Screen: \"This is what a reminder looks like\""
     else
