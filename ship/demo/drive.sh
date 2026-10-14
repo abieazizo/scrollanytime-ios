@@ -110,7 +110,9 @@ for attempt in 1 2 3; do
   echo "  !! $BUNDLE not up (attempt $attempt) - launching it directly"
   xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
 done
-front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; exit 1; }
+# the sign-in walk relaunches the app itself, so a flaky "in front" reading is not the end of it
+# there (run 38112671754: "is running", then "could not get … to the front", and the walk never ran)
+front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; [ -f ship/demo/walk-signin ] || exit 1; }
 
 shot 01-launched
 sleep 5
@@ -144,6 +146,21 @@ fi
 CONTINUE_Y="${CONTINUE_Y:-$(fy 0.903)}"
 axdump 01-landing
 
+# ── THE NOTIFY WALK (2026-10-14) ──────────────────────────────────────────────────────────────
+# With the marker file ship/demo/walk-notify present: the reminder ask end to end in this build
+# against the live site — the card, the iOS system prompt, Allow, a local notification, a push
+# (ship/demo/walk-notify.sh). Best effort: a failed step is a finding in crash/notify.txt.
+if [ -f ship/demo/walk-notify ]; then
+  set +e
+  . ship/demo/walk-signin.sh
+  . ship/demo/walk-notify.sh
+  shot "notify-00-welcome"; ocr "notify-00-welcome"
+  notify_walk
+  cat "$NOTE" 2>/dev/null
+  echo "notify walk finished"
+  exit 0
+fi
+
 # ── THE SIGN-IN WALK (2026-10-10) ─────────────────────────────────────────────────────────────
 # With the marker file ship/demo/walk-signin present: what Continue with Google and Sign in with
 # Apple do in THIS build, then — when the tree carries ship/ios-before — in that shell too (the
@@ -154,6 +171,8 @@ if [ -f ship/demo/walk-signin ]; then
   . ship/demo/walk-signin.sh
   signin_walk now
   selftest_walk
+  # the device and state matrix runs on the CURRENT build, before the old shell replaces it
+  [ -f ship/demo/walk-matrix ] && matrix_walk
   if install_before; then signin_walk before; else echo "  (no before shell in this tree)"; fi
   cat "$OUT"/signin-*.txt 2>/dev/null
   echo "sign-in walk finished"

@@ -45,6 +45,11 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // picture taken before the report sheet comes up.
     ReportBridge.start()
     userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, \(ReportBridge.shellFields()));", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    // THE NOTIFY WALK (2026-10-14, Simulator only): `-saSeed <base64 JSON>` writes those storage
+    // entries before the page's first script (ReportBridge.seedScript). Dormant on every install.
+    if let seed = ReportBridge.seedScript() {
+        userContentController.addUserScript(WKUserScript(source: seed, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    }
     userContentController.add(WKSMH, name: "snap")
     // THE LAUNCH: two haptics — a soft impact when the tile snaps crisp, a light tick when the
     // last letter of the name closes. The web layer posts { style: "soft" | "light" }; where this

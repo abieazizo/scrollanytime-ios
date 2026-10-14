@@ -34,6 +34,7 @@ enum NotifyBridge {
 
     static func handle(_ message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
+        if ReportBridge.selfTest { NSLog("SA-SELFTEST page asked: %@", action) }
         switch action {
         case "getPermissionState":
             permissionState()
@@ -62,6 +63,7 @@ enum NotifyBridge {
     static func emit(_ event: String, _ detail: Any) {
         guard let data = try? JSONSerialization.data(withJSONObject: detail, options: [.fragmentsAllowed]),
               let json = String(data: data, encoding: .utf8) else { return }
+        if ReportBridge.selfTest && event != "snap-result" { NSLog("SA-SELFTEST emit %@ %@", event, String(json.prefix(80))) }
         DispatchQueue.main.async {
             PWAShell.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('\(event)', { detail: \(json) }))", completionHandler: nil)
         }
@@ -346,7 +348,24 @@ enum ReportBridge {
     // the real web view against whatever page the shell loads: it reads __saShell, asks `snap` for a
     // picture, keeps the JPEG in the app's tmp folder for the walk to pull, and reports a shake the
     // page heard. Every line goes to the unified log as "SA-SELFTEST …".
-    static var selfTest: Bool { ProcessInfo.processInfo.arguments.contains("-saSelfTest") }
+    static var selfTest: Bool { ProcessInfo.processInfo.arguments.contains("-saSelfTest") || ProcessInfo.processInfo.arguments.contains("-saSeed") }
+
+    // ── THE NOTIFY WALK (2026-10-14) ────────────────────────────────────────────────────────────
+    // `-saSeed <base64 of a JSON object of strings>`, again only from `xcrun simctl launch`: those
+    // localStorage entries are written at document start, ONCE (a reload must not undo what the page
+    // wrote since — the offer count, the plan). ship/demo/walk-notify.sh starts the real shell as a
+    // fresh guest on the live site, past the welcome card, and walks the reminder ask through the
+    // system prompt. With it on, every event the shell sends the page is logged (NotifyBridge.emit).
+    static func seedScript() -> String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-saSeed"), i + 1 < args.count,
+              let data = Data(base64Encoded: args[i + 1]),
+              let entries = (try? JSONSerialization.jsonObject(with: data)) as? [String: String],
+              let json = try? JSONSerialization.data(withJSONObject: entries),
+              let literal = String(data: json, encoding: .utf8) else { return nil }
+        NSLog("SA-SELFTEST seed: %ld storage entries at document start", entries.count)
+        return "(function(){try{if(localStorage.getItem('sa.seeded')!=='1'){var s=\(literal);for(var k in s)localStorage.setItem(k,s[k]);localStorage.setItem('sa.seeded','1');}}catch(e){}})();"
+    }
 
     static func runSelfTest() {
         guard selfTest, let web = PWAShell.webView else { return }
