@@ -514,6 +514,10 @@ extension ViewController: WKScriptMessageHandler {
             if (message.body as? String) == "selftest-shake" {
                 if ReportBridge.selfTest { NSLog("SA-SELFTEST shake: the page heard sa-shake") }
             }
+            // the XCUITest's record of what the page said (dormant without -saUITest)
+            if let said = message.body as? String, said.hasPrefix("uitest-saw:") {
+                UITestHooks.saw(String(said.dropFirst("uitest-saw:".count)))
+            }
             if (message.body as? String) == "painted" {
                 // the page exists: tell it about Low Power Mode, heat and memory (B-013)
                 PowerBridge.start()

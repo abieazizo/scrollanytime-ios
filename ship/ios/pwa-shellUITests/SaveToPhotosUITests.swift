@@ -56,15 +56,17 @@ final class SaveToPhotosUITests: XCTestCase {
         let pick = try pickClip()
         let before = try libraryVideos()
         let app = try openMoreSheet(pick)
-        tapSaveToPhotos(app)
-        // a second tap while the save runs does nothing (the row is busy) — one video, not two
-        let busy = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH 'Saving to Photos'")).firstMatch
-        if busy.waitForExistence(timeout: 8) {
-            busy.tap()
-            note("tapped the row again while it said \"\(busy.label)\"")
-        } else {
-            note("the save finished before a second tap could land")
-        }
+        // two taps 0.15 s apart: the second lands while the first is still downloading (a save needs the
+        // file first), and must do nothing — one video, not two. (Waiting to SEE "Saving to Photos…"
+        // first raced a 3-second save: run 38645674476's late tap started a second, legitimate save.)
+        Thread.sleep(forTimeInterval: 0.8)
+        // a fixed point on the screen, read once: an element-bound coordinate looks the row up again by its
+        // label at every press, and after the first press the row reads "Saving to Photos…" (run 38654180561)
+        let frame = saveRow(app).frame
+        let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+        point.press(forDuration: 0.15)
+        point.press(forDuration: 0.15)
+        note("tapped Save to Photos twice, the second while the first was saving")
         XCTAssertFalse(springboard.alerts.firstMatch.waitForExistence(timeout: 2), "iOS asked although access was already granted")
         try expectSaved(app, before: before, pick: pick, name: "granted")
     }
@@ -80,7 +82,7 @@ final class SaveToPhotosUITests: XCTestCase {
         attach("denied-sheet")
         let open = app.descendants(matching: .button).matching(NSPredicate(format: "label == 'Open Settings'")).firstMatch
         XCTAssertTrue(open.waitForExistence(timeout: 5), "the sheet has no Open Settings button")
-        open.tap()
+        open.press(forDuration: 0.15)
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 15), "Open Settings did not open Settings")
         attach("denied-settings")
@@ -103,14 +105,38 @@ final class SaveToPhotosUITests: XCTestCase {
             target = more.allElementsBoundByIndex.first { $0.exists && $0.isHittable }
             if target == nil { Thread.sleep(forTimeInterval: 1) }
         }
-        attach("feed")
-        guard let button = target else {
+        guard target != nil else {
+            attach("feed")
             XCTFail("the feed never showed a More button (120 s)")
             throw NoFeed()
         }
-        button.tap()
+        // the first page settles (posters, the first clip's playback, the rail's own entrance) before a
+        // person's thumb would land; a tap during that can miss the sheet
+        Thread.sleep(forTimeInterval: 3)
+        attach("feed")
         let row = saveRow(app)
-        let found = row.waitForExistence(timeout: 15)
+        var found = false
+        // the More button of the clip on screen now, found once: XCTest's element queries are slow on this
+        // page (run 38651769742: 20 s between retries), and the lockup idles again 8 s after a touch
+        guard let button = more.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) else {
+            XCTFail("the More button left the screen")
+            throw NoFeed()
+        }
+        note("More options at \(button.frame)")
+        let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: button.frame.midX, dy: button.frame.midY))
+        // after 8 s of watching, the first touch fades the clip's lockup back in, and WebKit drops the click
+        // of a tap that ends while content is appearing (run 38642097942's recording; the web fix is
+        // 7a33bfd). So, as a thumb does on its way to the rail: a touch on the clip wakes the lockup, and
+        // the press on More comes 0.6 s later, after the fade — with no query in between, because a query
+        // here can take longer than the 8 s the lockup stays awake (run 38651769742: 20 s per retry).
+        let wakePoint = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
+        for attempt in 1...3 where !found {
+            wakePoint.press(forDuration: 0.1)
+            Thread.sleep(forTimeInterval: 0.6)
+            point.press(forDuration: 0.2)
+            found = row.waitForExistence(timeout: 3)
+            if !found { note("the sheet did not open on press \(attempt)") }
+        }
         attach("more-sheet")
         if !found {
             // say what the sheet holds instead — a site without the Save to Photos page shows "Download"
@@ -126,16 +152,20 @@ final class SaveToPhotosUITests: XCTestCase {
     }
 
     private func tapSaveToPhotos(_ app: XCUIApplication) {
-        saveRow(app).tap()
+        // the sheet settles on a spring; give it its moment, then a person's tap
+        Thread.sleep(forTimeInterval: 0.8)
+        saveRow(app).press(forDuration: 0.15)
         note("tapped Save to Photos")
     }
 
     /// "Saved to Photos" on the row, then in the toast — and exactly one new video in the library, the
     /// length of the file a save of this clip downloads
     private func expectSaved(_ app: XCUIApplication, before: [Video], pick: Pick, name: String) throws {
-        let saved = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS 'Saved to Photos'")).firstMatch
-        XCTAssertTrue(saved.waitForExistence(timeout: 240), "\"Saved to Photos\" never appeared")
-        note("the app said: \(saved.label)")
+        // "Saved to Photos" is on screen ~3 s, often less than one snapshot of this page takes: the shell
+        // keeps a record of each time the page showed it (UITestHooks.saw), and that record stays
+        let saw = app.descendants(matching: .any).matching(identifier: "sa-uitest-saw").firstMatch
+        XCTAssertTrue(saw.waitForExistence(timeout: 240), "\"Saved to Photos\" never appeared")
+        note("the app said it: \(saw.label)")
         attach("\(name)-saved")
         var after = try libraryVideos()
         let until = Date().addingTimeInterval(20)

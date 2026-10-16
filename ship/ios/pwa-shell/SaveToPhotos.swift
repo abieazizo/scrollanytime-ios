@@ -298,6 +298,43 @@ enum UITestHooks {
         }
         guard let data = try? JSONSerialization.data(withJSONObject: setup, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return nil }
-        return "(function(){try{var s=\(json);for(var k in s){localStorage.setItem(k,s[k]);}sessionStorage.setItem('zerem.soundprompt','1');}catch(e){}})();"
+        return "(function(){try{var s=\(json);for(var k in s){localStorage.setItem(k,s[k]);}sessionStorage.setItem('zerem.soundprompt','1');}catch(e){}})();" + sawScript
+    }
+
+    /// "Saved to Photos" is on screen for about three seconds (the row's checkmark, then the toast), and one
+    /// accessibility snapshot of the feed can take longer than that — the test missed it (run 38655601404)
+    /// although the save had worked. So, under the test only, the page's own words are watched as they
+    /// appear and each appearance is posted to the shell, which keeps it where the test can read it at any
+    /// time (`saw`). It records what the page put on screen; it changes nothing the page does.
+    private static let sawScript = """
+    (function(){var last=0;function hit(){var now=Date.now();if(now-last<1500)return;last=now;try{window.webkit.messageHandlers.sa.postMessage('uitest-saw:Saved to Photos')}catch(e){}}
+    function has(n){var t=n&&n.textContent;return !!t&&t.indexOf('Saved to Photos')!==-1}
+    new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==='characterData'){if(has(m.target)){hit();return}continue}
+    for(var j=0;j<m.addedNodes.length;j++){if(has(m.addedNodes[j])){hit();return}}}}).observe(document,{childList:true,subtree:true,characterData:true});})();
+    """
+
+    private static var sawCount = 0
+    private static weak var sawLabel: UILabel?
+
+    /// the page put "Saved to Photos" on screen: count it on a native label the test reads
+    static func saw(_ text: String) {
+        guard on else { return }
+        DispatchQueue.main.async {
+            sawCount += 1
+            let label: UILabel
+            if let existing = sawLabel {
+                label = existing
+            } else {
+                guard let window = PWAShell.webView?.window else { return }
+                label = UILabel(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+                label.alpha = 0.05
+                label.isAccessibilityElement = true
+                label.accessibilityIdentifier = "sa-uitest-saw"
+                window.addSubview(label)
+                sawLabel = label
+            }
+            label.accessibilityLabel = "SA-UITEST saw \(text) \(sawCount)"
+            SaveToPhotos.log("the page said \"\(text)\" (\(sawCount))")
+        }
     }
 }

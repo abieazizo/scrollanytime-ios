@@ -41,8 +41,9 @@ echo "nav y=$NAVY  tabs: feed=$FEED_X torah=$TORAH_X rabbis=$RABBIS_X profile=$P
 # where the workflow uploads them: screenshots under shots/, the summary and each path's log under ax/.
 if [ -f ship/demo/walk-photos ]; then
   mkdir -p "$OUT/ax" "$OUT/shots"
-  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-photos.sh
-  code=$?
+  # `|| code=$?`: this script runs under set -e, and a red gate must still leave its pictures behind
+  code=0
+  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-photos.sh || code=$?
   cp "$OUT"/uitest/*.png "$OUT/shots/" 2>/dev/null || true
   cp "$OUT/uitest/summary.json" "$OUT/ax/uitest-summary.json" 2>/dev/null || true
   for f in "$OUT"/uitest/*.log; do
