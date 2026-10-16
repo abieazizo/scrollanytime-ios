@@ -124,11 +124,20 @@ final class SaveToPhotosUITests: XCTestCase {
         }
         note("More options at \(button.frame)")
         let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: button.frame.midX, dy: button.frame.midY))
-        // after 8 s of watching, the first touch fades the clip's lockup back in, and WebKit drops the click
-        // of a tap that ends while content is appearing (run 38642097942's recording; the web fix is
-        // 7a33bfd). So, as a thumb does on its way to the rail: a touch on the clip wakes the lockup, and
-        // the press on More comes 0.6 s later, after the fade — with no query in between, because a query
-        // here can take longer than the 8 s the lockup stays awake (run 38651769742: 20 s per retry).
+        // ONE TAP after watching (the owner's "one tap"): no touch for 9 s, so the clip's lockup has faded
+        // (8 s), then XCTest's own quick tap on More. Until d66f2c6 the page woke the lockup at that touch and
+        // iOS WebKit dropped the click (run 38642097942: nine misses). Recorded, not asserted — the web half
+        // ships on its own clock and the gate is about the shell; the line below is the evidence either way.
+        Thread.sleep(forTimeInterval: 9)
+        point.tap()
+        found = row.waitForExistence(timeout: 3)
+        note("ONE TAP after 9 s of watching: \(found ? "the sheet opened" : "the sheet did NOT open")")
+        // Should the one tap miss (a site before d66f2c6): after 8 s of watching, the first touch fades the
+        // clip's lockup back in, and WebKit drops the click of a tap that ends while content is appearing
+        // (run 38642097942's recording). So, as a thumb does on its way to the rail: a touch on the clip wakes
+        // the lockup, and the press on More comes 0.6 s later, after the fade — with no query in between,
+        // because a query here can take longer than the 8 s the lockup stays awake (run 38651769742: 20 s per
+        // retry).
         let wakePoint = app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.45))
         for attempt in 1...3 where !found {
             wakePoint.press(forDuration: 0.1)
