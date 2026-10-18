@@ -116,16 +116,32 @@ seg_stop() {
   rm -f "$OUT/.seg-$1.mov"
 }
 
+# THE SIGN-IN SHEET IS PROFILE → SIGN IN (the release sweep, 2026-10-18): the welcome card this walk
+# was written against was deleted with the old onboarding (2026-10-16), so every run since found no
+# "Continue with Google" and walked nothing. Open the one sign-in sheet the app has, the way a person
+# does: the Profile tab, then Sign in.
+open_signin_sheet() {
+  local L="$1" tag="$2"
+  if tap_text "profile" --exact; then sleep 3; else say "$L" "no Profile tab on screen ($tag)"; fi
+  shot "$L-$tag-profile"; read_screen "$L-$tag-profile" "$L"
+  if tap_text "sign in" --exact || tap_text "sign in"; then sleep 3; else say "$L" "Profile shows no Sign in ($tag)"; fi
+  shot "$L-$tag-sheet"; read_screen "$L-$tag-sheet" "$L"
+  grep -qi "sign in with apple" "$OUT/ocr/$L-$tag-sheet.txt" 2>/dev/null && say "$L" "the sheet offers Sign in with Apple ($tag)"
+  grep -qi "continue with google" "$OUT/ocr/$L-$tag-sheet.txt" 2>/dev/null && say "$L" "the sheet offers Continue with Google ($tag)"
+  grep -qi "continue with email" "$OUT/ocr/$L-$tag-sheet.txt" 2>/dev/null && say "$L" "the sheet offers Continue with email ($tag)"
+}
+
 signin_walk() {
   local L="$1"
   echo "── sign-in walk: $L ──" | tee -a "$OUT/signin-$L.txt"
   sleep 3
   shot "$L-10-welcome"; read_screen "$L-10-welcome" "$L"
+  open_signin_sheet "$L" "10b"
 
   # ── Google ──
   seg_start "$L-google"
   if ! tap_text "continue with google"; then
-    say "$L" "the welcome card shows no Continue with Google (see $L-10-welcome)"
+    say "$L" "the sign-in sheet shows no Continue with Google (see $L-10b-sheet)"
   else
     sleep 3
     shot "$L-11-after-google-tap"; read_screen "$L-11-after-google-tap" "$L"
@@ -175,6 +191,7 @@ signin_walk() {
   relaunch
   seg_start "$L-apple"
   shot "$L-20-welcome-again"; read_screen "$L-20-welcome-again" "$L"
+  open_signin_sheet "$L" "20b"
   if tap_text "sign in with apple"; then
     sleep 5
     shot "$L-21-apple-sheet"; read_screen "$L-21-apple-sheet" "$L"
@@ -182,7 +199,7 @@ signin_walk() {
     sleep 4
     shot "$L-22-after-apple"; read_screen "$L-22-after-apple" "$L"
   else
-    say "$L" "the welcome card shows no Sign in with Apple"
+    say "$L" "the sign-in sheet shows no Sign in with Apple (see $L-20b-sheet)"
   fi
   seg_stop "$L-apple"
 }
