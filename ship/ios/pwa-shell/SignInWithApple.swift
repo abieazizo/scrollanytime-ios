@@ -37,6 +37,12 @@ final class SignInWithApple: NSObject, ASAuthorizationControllerDelegate, ASAuth
             return
         }
         var detail: [String: Any] = ["ok": true, "identityToken": token, "user": cred.user]
+        // THE ONE-TIME AUTHORIZATION CODE (the release sweep, 2026-10-18, RS-006): deleting an account
+        // that signs in with Apple must revoke the app's Apple tokens (App Store 5.1.1(v)), and only
+        // this code can be exchanged for them — the Worker does that and revokes at once, keeping nothing
+        if let codeData = cred.authorizationCode, let code = String(data: codeData, encoding: .utf8) {
+            detail["authorizationCode"] = code
+        }
         // Apple provides the name exactly once, on the first authorization
         if let n = cred.fullName {
             let parts = [n.givenName, n.familyName].compactMap { $0 }.filter { !$0.isEmpty }

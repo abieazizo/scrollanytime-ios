@@ -14,9 +14,12 @@
 
   Deliberately ABSENT, each for a stated reason:
     NSCameraUsageDescription / NSMicrophoneUsageDescription  — the app has no capture of any kind
-    NSLocation*UsageDescription                              — there is no location code in the
-                                                               product at all (Shabbat mode was
-                                                               deleted product-wide)
+    NSLocation*UsageDescription                              — the shell never asks for the device's
+                                                               location; the approximate city that
+                                                               times Shabbat comes from the server
+                                                               (Cloudflare's estimate, or the city
+                                                               picked in Profile — Coarse Location
+                                                               on the label, 2026-10-18)
     NSPhotoLibraryUsageDescription / NSContacts*             — never read (Save to Photos is ADD-ONLY:
                                                                NSPhotoLibraryAddUsageDescription below)
     UIBackgroundModes                                        — Listen Mode ships screen-on; a
