@@ -334,3 +334,41 @@ for r in json.load(sys.stdin)['runtimes']:
   done
   python3 -c "import json,sys; print(json.dumps({'lines': open(sys.argv[1], encoding='utf-8', errors='replace').read().splitlines()}))" "$OUT/signin-matrix.txt" > "$OUT/ax/matrix.json" 2>/dev/null || true
 }
+
+# ── the relaunch walk (drive.sh, marker walk-relaunch) ──
+rshot() {
+  local name="$1"
+  shot "$name"
+  ocr "$name"
+  python3 - "$OUT/ocr/$name.txt" "$name" <<'PY' | tee -a "$OUT/relaunch.txt"
+import sys
+text = open(sys.argv[1], encoding='utf-8', errors='replace').read().lower()
+tabs = [w for w in ('feed', 'my torah', 'rabbis', 'profile') if w in text]
+head = [w for w in ('parsha', 'for you', 'following') if w in text]
+state = 'TABBAR ok' if len(tabs) >= 3 else 'TABBAR MISSING'
+print(f"[relaunch] {sys.argv[2]}: {state} (tabs {tabs}; header {head})")
+PY
+}
+
+relaunch_walk() {
+  echo "── relaunch walk ──" | tee -a "$OUT/relaunch.txt"
+  local i
+  for i in 1 2 3; do relaunch_quiet; sleep 14; rshot "r-default-$i"; done
+  xcrun simctl ui "$UDID" appearance light || true
+  for i in 1 2 3; do relaunch_quiet; sleep 14; rshot "r-light-$i"; done
+  relaunch_quiet; sleep 30; rshot "r-light-30s"
+  xcrun simctl ui "$UDID" appearance dark || true
+  for i in 1 2; do relaunch_quiet; sleep 14; rshot "r-dark-$i"; done
+  xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEnabled -bool true || true
+  relaunch_quiet; sleep 14; rshot "r-reduce-on"
+  xcrun simctl spawn "$UDID" defaults write com.apple.Accessibility ReduceMotionEnabled -bool false || true
+  for i in 1 2 3; do relaunch_quiet; sleep 14; rshot "r-reduce-off-$i"; done
+  xcrun simctl ui "$UDID" content_size accessibility-extra-extra-extra-large || true
+  relaunch_quiet; sleep 14; rshot "r-xxxl"
+  xcrun simctl ui "$UDID" content_size large || true
+  relaunch_quiet; sleep 14; rshot "r-after-xxxl"
+  # the appearance changed while the app is open
+  xcrun simctl ui "$UDID" appearance light || true; sleep 5; rshot "r-live-light"
+  xcrun simctl ui "$UDID" appearance dark || true; sleep 5; rshot "r-live-dark"
+  grep -c "TABBAR MISSING" "$OUT/relaunch.txt" | sed 's/^/[relaunch] missing: /' | tee -a "$OUT/relaunch.txt"
+}

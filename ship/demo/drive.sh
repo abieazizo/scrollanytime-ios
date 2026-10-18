@@ -179,6 +179,20 @@ if [ -f ship/demo/walk-notify ]; then
   exit 0
 fi
 
+# ── THE RELAUNCH WALK (the release sweep, 2026-10-18) ─────────────────────────────────────────
+# With the marker ship/demo/walk-relaunch: relaunch the app again and again under the system's own
+# toggles (appearance, Reduce Motion, the text size) and read every screen for the tab bar. One
+# relaunch of the 10-18 matrix walk came up with the tab bar gone and the feed resting ~38 pt off its
+# snap point; this measures how often, and under what.
+if [ -f ship/demo/walk-relaunch ]; then
+  set +e
+  . ship/demo/walk-signin.sh
+  relaunch_walk
+  cat "$OUT"/relaunch.txt 2>/dev/null
+  echo "relaunch walk finished"
+  exit 0
+fi
+
 # ── THE SIGN-IN WALK (2026-10-10) ─────────────────────────────────────────────────────────────
 # With the marker file ship/demo/walk-signin present: what Continue with Google and Sign in with
 # Apple do in THIS build, then — when the tree carries ship/ios-before — in that shell too (the
