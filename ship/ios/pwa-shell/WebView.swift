@@ -69,8 +69,18 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // native view. The web view is never hidden for this to work: WebKit stops rendering (and
     // requestAnimationFrame) in a hidden view, so the page could not tell us anything.
     userContentController.add(WKSMH, name: "sa")
+    // THE SESSION IN THE KEYCHAIN (the owner's P0, 2026-10-22: "people are signed out every day";
+    // DeviceId.swift SessionKeychain): the page saves the session it holds after every change and asks for
+    // it back when it boots with web storage empty. `keychain: 1` tells the page before its first script;
+    // a shell without it (1.1.4 and older) is a shell the page does not ask.
+    userContentController.addScriptMessageHandler(SessionBridge(), contentWorld: .page, name: "session")
+    userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, { keychain: 1 });", injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
     config.userContentController = userContentController
+    // THE PERSISTENT STORE, said out loud (2026-10-22): cookies — the server's HttpOnly refresh cookie among
+    // them — and localStorage live on disk and survive every relaunch. A non-persistent store would forget
+    // the person at each launch; this has always been the default, and it is now written down.
+    config.websiteDataStore = WKWebsiteDataStore.default()
 
     config.limitsNavigationsToAppBoundDomains = true;
     config.allowsInlineMediaPlayback = true

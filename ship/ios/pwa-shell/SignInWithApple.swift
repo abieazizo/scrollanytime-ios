@@ -52,9 +52,33 @@ final class SignInWithApple: NSObject, ASAuthorizationControllerDelegate, ASAuth
         dispatch(detail)
     }
 
+    /// WHY IT FAILED, NOT JUST THAT IT DID (launch week, 2026-10-21). One person on iOS 27.0.1 hit
+    /// this five times in two minutes on 2026-10-20 and is still a guest with no email and no
+    /// onboarding — behind the sign-in wall he could not use the app at all. Every reason was being
+    /// flattened to the single word "failed" here, so the line he left said nothing anyone could act
+    /// on. ASAuthorizationError separates the cases that need different answers: `.notHandled` and
+    /// `.unknown` are usually a device with no Apple ID or Sign in with Apple restricted, which is
+    /// not something a retry can fix and is the moment to point at email; `.invalidResponse` and
+    /// `.failed` are Apple's own; `.notInteractive` is our presentation. The code and Apple's own
+    /// description both ride home, bounded, and `canceled` keeps the exact word the page tests for.
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        let canceled = (error as? ASAuthorizationError)?.code == .canceled
-        dispatch(["ok": false, "error": canceled ? "canceled" : "failed"])
+        let auth = error as? ASAuthorizationError
+        if auth?.code == .canceled {
+            dispatch(["ok": false, "error": "canceled"])
+            return
+        }
+        let name: String
+        switch auth?.code {
+        case .some(.failed): name = "failed"
+        case .some(.invalidResponse): name = "invalid-response"
+        case .some(.notHandled): name = "not-handled"
+        case .some(.notInteractive): name = "not-interactive"
+        case .some(.unknown): name = "unknown"
+        default: name = "failed"
+        }
+        let ns = error as NSError
+        let why = ns.localizedDescription.prefix(60)
+        dispatch(["ok": false, "error": "\(name) [\(ns.domain) \(ns.code)] \(why)"])
     }
 
     private func dispatch(_ detail: [String: Any]) {

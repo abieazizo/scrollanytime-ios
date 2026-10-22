@@ -333,3 +333,120 @@ final class SaveToPhotosUITests: XCTestCase {
         add(shot)
     }
 }
+
+/// STILL SIGNED IN AFTER THE WEB STORE IS WIPED (the owner's P0, 2026-10-22: "people are signed out every day …
+/// a wrapper test on the simulator"). The real shell on the Simulator, against the live site:
+///
+///   1. the page holds a session — a guest the test mints with NO device id, so nothing but the Keychain can
+///      ever bring it back (the server hands a device's own guest back by its id; this one has none) — and
+///      the shell keeps it in the Keychain (the `session` bridge; the marker names who was saved);
+///   2. the app is terminated and relaunched with its WHOLE web data store wiped first — localStorage,
+///      IndexedDB, caches and every cookie, the server's refresh cookie with them (-saUITestWipeWebData);
+///   3. it must come back as the same person: the page asked the Keychain, put the session back and saved it
+///      again (a new guest would be another id).
+///
+/// An account cannot be made here — no credential is ever entered on this machine or its runners; the Keychain
+/// holds an account's session exactly as it holds this one, and scripts/_verify_still_signed_in.mjs proves the
+/// page's side for email, Google and Apple. Run by ship/ios/uitest-session.sh (the Fastfile's `signing` lane).
+final class SessionPersistUITests: XCTestCase {
+    static let origin = "https://scrollanytime.com"
+    static let appId = "com.scrollanytime.app"
+    private var token: String?
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        // the test's guest leaves with the test
+        if let token { _ = try? http("DELETE", "/me", token: token) }
+    }
+
+    func testSessionSurvivesAWipedWebStore() throws {
+        // a guest of the test's own, minted with no device id
+        let (status, data) = try http("POST", "/auth/guest", body: Data("{}".utf8))
+        XCTAssertTrue((200..<300).contains(status), "guest mint answered \(status)")
+        let minted = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let token = try XCTUnwrap(minted["token"] as? String)
+        self.token = token
+        let user = try XCTUnwrap(minted["user"] as? [String: Any])
+        let id = try XCTUnwrap(user["id"] as? String)
+        let userJSON = String(decoding: try JSONSerialization.data(withJSONObject: user), as: UTF8.self)
+        note("the test's guest \(id.prefix(8))")
+
+        // 1 · the page holds it, and the shell keeps it in the Keychain
+        let app = XCUIApplication(bundleIdentifier: Self.appId)
+        app.launchArguments = ["-saUITest", "-saUITestToken", token, "-saUITestUser", userJSON]
+        app.launch()
+        XCTAssertTrue(waitForSession(app, id, timeout: 120), "the page never saved its session to the Keychain (the marker never named \(id.prefix(8)))")
+        attach("held")
+
+        // 2 · terminated; relaunched with the whole web data store wiped before the page loads
+        app.terminate()
+        app.launchArguments = ["-saUITest", "-saUITestWipeWebData"]
+        app.launch()
+        let wiped = app.descendants(matching: .any).matching(identifier: "sa-uitest-wiped").firstMatch
+        XCTAssertTrue(wiped.waitForExistence(timeout: 60), "the shell did not wipe the web data store")
+
+        // 3 · the same person, back from the Keychain
+        XCTAssertTrue(waitForSession(app, id, timeout: 120), "after the wipe the page is not \(id.prefix(8)): \(sessionMarker(app) ?? "no session saved")")
+        attach("back-from-keychain")
+        note("after the wipe: \(sessionMarker(app) ?? "-")")
+    }
+
+    // MARK: the marker (UITestHooks.sessionSaved)
+
+    private func sessionMarker(_ app: XCUIApplication) -> String? {
+        let m = app.descendants(matching: .any).matching(identifier: "sa-uitest-session").firstMatch
+        return m.exists ? m.label : nil
+    }
+
+    private func waitForSession(_ app: XCUIApplication, _ id: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if sessionMarker(app) == "SA-UITEST session \(id)" { return true }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        return false
+    }
+
+    // MARK: the API, as the Save to Photos test speaks it
+
+    private func http(_ method: String, _ path: String, token: String? = nil, body: Data? = nil) throws -> (Int, Data) {
+        var last: Error?
+        // a freshly booted Simulator can fail TLS (-1200) for its first minute or two: keep asking, patiently
+        for attempt in 0..<9 {
+            if attempt > 0 { Thread.sleep(forTimeInterval: attempt < 3 ? 3 : 15) }
+            var req = URLRequest(url: URL(string: Self.origin + path)!)
+            req.httpMethod = method
+            req.timeoutInterval = 30
+            // the shell's marker: Ops files this guest under Test suite, never as a person
+            req.setValue("ScrollAnytime-XCUITest SAUITest", forHTTPHeaderField: "User-Agent")
+            if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+            if let body {
+                req.httpBody = body
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            let sem = DispatchSemaphore(value: 0)
+            var result: (Int, Data)?
+            URLSession.shared.dataTask(with: req) { data, response, error in
+                if let error { last = error } else { result = ((response as? HTTPURLResponse)?.statusCode ?? 0, data ?? Data()) }
+                sem.signal()
+            }.resume()
+            if sem.wait(timeout: .now() + 45) == .timedOut { last = URLError(.timedOut); continue }
+            if let result, result.0 < 500 { return result }
+        }
+        throw last ?? URLError(.badServerResponse)
+    }
+
+    private func note(_ line: String) {
+        print("SA-UITEST \(name): \(line)")
+    }
+
+    private func attach(_ label: String) {
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = label
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+}

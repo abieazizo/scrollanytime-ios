@@ -219,6 +219,9 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     }
     
     @objc func loadRootUrl(cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy) {
+        // under its XCUITest only (-saUITestWipeWebData): the whole web data store goes first — storage and
+        // cookies, as an evicted store would — and the page loads after (SaveToPhotos.swift UITestHooks)
+        if UITestHooks.wipeWebDataOnce({ [weak self] in self?.loadRootUrl(cachePolicy: cachePolicy) }) { return }
         armLoadingPage()
         PWAShell.webView.load(URLRequest(url: SceneDelegate.universalLinkToLaunch ?? SceneDelegate.shortcutLinkToLaunch ?? UITestHooks.startURL ?? rootUrl, cachePolicy: cachePolicy))
     }

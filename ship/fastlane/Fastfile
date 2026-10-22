@@ -72,10 +72,21 @@ platform :ios do
     sh('bash', File.join(IOS_DIR, 'uitest-photos.sh'))
   end
 
+  # ── the "still signed in" gate ───────────────────────────────────────────────────────────────
+  # The owner's P0 of 2026-10-22 ("people are signed out every day … a release cannot pass if 'still signed
+  # in tomorrow' fails"): on the Simulator, against the live site, the page's session is kept in the Keychain,
+  # the app is relaunched with its whole web data store wiped, and it must come back as the same person
+  # (ship/ios/uitest-session.sh, SessionPersistUITests). It reuses the Save to Photos gate's build.
+  desc 'Still signed in after a wiped web store: the XCUITest on the Simulator (the release gate)'
+  lane :uitest_session do
+    sh('bash', File.join(IOS_DIR, 'uitest-session.sh'))
+  end
+
   # ── signing ──────────────────────────────────────────────────────────────────────────────────
   desc 'Create the distribution certificate and App Store profile on this runner'
   lane :signing do
     uitest_photos
+    uitest_session
     asc_key
     # A distribution certificate for App Store builds. On a fresh runner there is none, so cert
     # creates one; on a re-run it finds the existing one and downloads it into the keychain.
