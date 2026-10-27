@@ -219,6 +219,9 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     }
     
     @objc func loadRootUrl(cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy) {
+        // under its XCUITest only (-saUITestWipeWebData): the whole web data store goes first — storage and
+        // cookies, as an evicted store would — and the page loads after (SaveToPhotos.swift UITestHooks)
+        if UITestHooks.wipeWebDataOnce({ [weak self] in self?.loadRootUrl(cachePolicy: cachePolicy) }) { return }
         armLoadingPage()
         PWAShell.webView.load(URLRequest(url: SceneDelegate.universalLinkToLaunch ?? SceneDelegate.shortcutLinkToLaunch ?? UITestHooks.startURL ?? rootUrl, cachePolicy: cachePolicy))
     }
@@ -361,7 +364,8 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
         webView.isHidden = false
         if wasOurs, let url = resumeAt, let host = url.host?.lowercased(), allowedOrigins.contains(host) {
             armLoadingPage()
-            webView.load(URLRequest(url: url))
+            // AND THE PAGE IS TOLD IT WAS THIS, not left to guess (ExitBridge, 2026-10-26)
+            webView.load(URLRequest(url: ExitBridge.mark(url)))
         } else {
             loadRootUrl()
         }
@@ -564,4 +568,25 @@ extension ViewController: WKScriptMessageHandler {
             SaveToPhotos.handle(message)
         }
   }
+}
+
+/// WHICH PROCESS DIED (2026-10-26). `app/src/lib/lifeline.ts` tells a crash from an app the person
+/// closed by how long ago the page's last note was written — a death on screen is reloaded at once —
+/// and that gap decides, alone. What only the shell knows is WHICH process died: `exit: 1` at document
+/// start means this shell can say (WebView.swift), and `sa_resume=1` on a page it resumed means it was
+/// WebKit's content process; a crash with no marker is the whole app, opened again by hand. The page
+/// carries that beside the crash and never lets it decide one: a content process iOS takes in the
+/// background is reloaded with the marker hours later, which is no on-screen crash. lib/lifeline.ts
+/// strips the parameter the moment it reads it, so it never rides a reload or a share.
+enum ExitBridge {
+    static let param = "sa_resume"
+
+    static func mark(_ url: URL) -> URL {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = parts.queryItems ?? []
+        items.removeAll { $0.name == param }
+        items.append(URLQueryItem(name: param, value: "1"))
+        parts.queryItems = items
+        return parts.url ?? url
+    }
 }

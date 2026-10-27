@@ -53,6 +53,23 @@ if [ -f ship/demo/walk-photos ]; then
   exit $code
 fi
 
+# STILL SIGNED IN, on a mirror branch (the owner's P0, 2026-10-22): with the marker ship/demo/walk-session
+# present, the walk is the shell's session XCUITest (ship/ios/uitest-session.sh: the page's session kept in
+# the Keychain, the whole web data store wiped on relaunch, the same person back) — the run the release's
+# signing lane gates on after Save to Photos — and nothing else. Nothing is signed or uploaded.
+if [ -f ship/demo/walk-session ]; then
+  mkdir -p "$OUT/ax" "$OUT/shots"
+  code=0
+  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-session.sh || code=$?
+  cp "$OUT"/uitest/*.png "$OUT/shots/" 2>/dev/null || true
+  cp "$OUT/uitest/session-summary.json" "$OUT/ax/uitest-session-summary.json" 2>/dev/null || true
+  for f in "$OUT"/uitest/*.log; do
+    [ -f "$f" ] || continue
+    python3 -c "import json,sys; print(json.dumps({'log': open(sys.argv[1], errors='replace').read()[-80000:]}))" "$f" > "$OUT/ax/uitest-$(basename "$f" .log).json"
+  done
+  exit $code
+fi
+
 
 # -- naming things instead of pointing at them --------------------------------------------------
 AX="$OUT/ax"; mkdir -p "$AX"

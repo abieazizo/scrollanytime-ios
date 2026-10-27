@@ -314,27 +314,71 @@ enum UITestHooks {
     """
 
     private static var sawCount = 0
-    private static weak var sawLabel: UILabel?
+    private static var markers: [String: UILabel] = [:]
+
+    /// a native label only the test reads (2 pt, nearly transparent): `id` is its accessibility identifier.
+    /// Early in a launch the web view may not be in a window yet: it tries again, for up to ten seconds.
+    private static func marker(_ id: String, _ text: String, attempt: Int = 0) {
+        let label: UILabel
+        if let existing = markers[id] {
+            label = existing
+        } else {
+            guard let window = PWAShell.webView?.window else {
+                if attempt < 20 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { marker(id, text, attempt: attempt + 1) } }
+                return
+            }
+            label = UILabel(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+            label.alpha = 0.05
+            label.isAccessibilityElement = true
+            label.accessibilityIdentifier = id
+            window.addSubview(label)
+            markers[id] = label
+        }
+        label.accessibilityLabel = text
+    }
 
     /// the page put "Saved to Photos" on screen: count it on a native label the test reads
     static func saw(_ text: String) {
         guard on else { return }
         DispatchQueue.main.async {
             sawCount += 1
-            let label: UILabel
-            if let existing = sawLabel {
-                label = existing
-            } else {
-                guard let window = PWAShell.webView?.window else { return }
-                label = UILabel(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
-                label.alpha = 0.05
-                label.isAccessibilityElement = true
-                label.accessibilityIdentifier = "sa-uitest-saw"
-                window.addSubview(label)
-                sawLabel = label
-            }
-            label.accessibilityLabel = "SA-UITEST saw \(text) \(sawCount)"
+            marker("sa-uitest-saw", "SA-UITEST saw \(text) \(sawCount)")
             SaveToPhotos.log("the page said \"\(text)\" (\(sawCount))")
         }
+    }
+
+    /// THE SESSION'S KEYCHAIN COPY, AS THE TEST SEES IT (2026-10-22, SessionPersistUITests): the person the page
+    /// last saved through the `session` bridge — "none" after a clear. It names the user id, nothing else.
+    static func sessionSaved(_ json: String?) {
+        guard on else { return }
+        var who = "none"
+        if let json, let data = json.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let user = obj["user"] as? [String: Any], let id = user["id"] as? String {
+            who = id
+        }
+        DispatchQueue.main.async {
+            marker("sa-uitest-session", "SA-UITEST session \(who)")
+            SaveToPhotos.log("the page saved its session to the Keychain (\(who))")
+        }
+    }
+
+    private static var wiped = false
+    /// `-saUITestWipeWebData`: once per launch, before the first page loads, the WHOLE web data store goes —
+    /// localStorage, IndexedDB, caches and every cookie — as an evicted store would. True when the wipe started
+    /// (the caller loads in `then`, once it is done); false otherwise, and nothing happens.
+    static func wipeWebDataOnce(_ then: @escaping () -> Void) -> Bool {
+        guard on, ProcessInfo.processInfo.arguments.contains("-saUITestWipeWebData"), !wiped else { return false }
+        wiped = true
+        WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
+            DispatchQueue.main.async {
+                // the shell's own platform cookie went with everything else: it is the shell's to put back
+                if let webView = PWAShell.webView { setCustomCookie(webView: webView) }
+                marker("sa-uitest-wiped", "SA-UITEST wiped")
+                SaveToPhotos.log("the web data store was wiped (-saUITestWipeWebData)")
+                then()
+            }
+        }
+        return true
     }
 }

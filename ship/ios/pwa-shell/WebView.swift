@@ -55,6 +55,9 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // into the camera roll — no share sheet. `photos: 1` tells the page before its first script.
     userContentController.add(WKSMH, name: "saveToPhotos")
     userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, { photos: 1 });", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    // THIS SHELL CAN SAY WHETHER IT RESUMED THE PAGE AFTER THE CONTENT PROCESS DIED (ExitBridge):
+    // lib/lifeline.ts carries the answer beside a crash — which process died — and never lets it decide one.
+    userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, { exit: 1 });", injectionTime: .atDocumentStart, forMainFrameOnly: true))
     // the XCUITest's storage (dormant without -saUITest, SaveToPhotos.swift UITestHooks)
     if let setup = UITestHooks.documentStartScript() {
         userContentController.addUserScript(WKUserScript(source: setup, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -69,8 +72,18 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // native view. The web view is never hidden for this to work: WebKit stops rendering (and
     // requestAnimationFrame) in a hidden view, so the page could not tell us anything.
     userContentController.add(WKSMH, name: "sa")
+    // THE SESSION IN THE KEYCHAIN (the owner's P0, 2026-10-22: "people are signed out every day";
+    // DeviceId.swift SessionKeychain): the page saves the session it holds after every change and asks for
+    // it back when it boots with web storage empty. `keychain: 1` tells the page before its first script;
+    // a shell without it (1.1.4 and older) is a shell the page does not ask.
+    userContentController.addScriptMessageHandler(SessionBridge(), contentWorld: .page, name: "session")
+    userContentController.addUserScript(WKUserScript(source: "window.__saShell = Object.assign(window.__saShell || {}, { keychain: 1 });", injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
     config.userContentController = userContentController
+    // THE PERSISTENT STORE, said out loud (2026-10-22): cookies — the server's HttpOnly refresh cookie among
+    // them — and localStorage live on disk and survive every relaunch. A non-persistent store would forget
+    // the person at each launch; this has always been the default, and it is now written down.
+    config.websiteDataStore = WKWebsiteDataStore.default()
 
     config.limitsNavigationsToAppBoundDomains = true;
     config.allowsInlineMediaPlayback = true
@@ -120,6 +133,13 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // under its XCUITest the shell says so, or Ops would count the test's guest as a person
     // (worker/src/domain/ops.ts SUITE_UAS)
     if UITestHooks.on { webView.customUserAgent = (webView.customUserAgent ?? "") + " SAUITest" }
+    // AND IN THE SIMULATOR IT ALWAYS SAYS SO (2026-10-26). The demo and sign-in walks run the shell
+    // there on GitHub's runners WITHOUT -saUITest, and 14 of launch week's "people's" crashes were
+    // theirs — an iPhone18,5 Simulator on a "1.1.3 (1)" build, its guest counted as a person by Ops,
+    // by the Error Doctor and by the owner's crash alert alike. No person runs this app in a Simulator.
+    #if targetEnvironment(simulator)
+    webView.customUserAgent = (webView.customUserAgent ?? "") + " SASimulator"
+    #endif
 
     // (estimatedProgress is observed ONCE, by ViewController.initWebView — a second registration
     // here fired every progress change twice, and only one was ever removed)
