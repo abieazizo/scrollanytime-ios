@@ -266,11 +266,23 @@ enum ReportBridge {
             }
         }
         monitor.start(queue: DispatchQueue(label: "com.scrollanytime.network"))
+        // THE GHOST (the owner's spec of 2026-10-28): the feed's interface settles while a clip plays,
+        // never while VoiceOver is running — and only the shell can know that it is
+        _ = NotificationCenter.default.addObserver(forName: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil, queue: .main) { _ in
+            postVoiceOver()
+        }
     }
 
     static func postNetwork() {
         let value = jsonString(network)
         PWAShell.webView?.evaluateJavaScript("window.__saShell = Object.assign(window.__saShell || {}, { network: \(value) })", completionHandler: nil)
+    }
+
+    /// `__saShell.voiceOver` (1 or 0) kept current, and `sa-voiceover` { on } when it changes
+    /// (app/src/feed/useGhostChrome.ts)
+    static func postVoiceOver() {
+        let on = UIAccessibility.isVoiceOverRunning
+        PWAShell.webView?.evaluateJavaScript("window.__saShell = Object.assign(window.__saShell || {}, { voiceOver: \(on ? 1 : 0) }); window.dispatchEvent(new CustomEvent('sa-voiceover', { detail: { on: \(on ? "true" : "false") } }))", completionHandler: nil)
     }
 
     /// "iPhone16,1"; in the Simulator, the model it stands in for
@@ -293,7 +305,7 @@ enum ReportBridge {
 
     /// the fields the page reads, as a JavaScript object literal (JSON, so nothing needs escaping)
     static func shellFields() -> String {
-        let fields: [String: Any] = ["shake": 1, "model": model, "os": os, "version": version, "network": network]
+        let fields: [String: Any] = ["shake": 1, "model": model, "os": os, "version": version, "network": network, "voiceOver": UIAccessibility.isVoiceOverRunning ? 1 : 0]
         guard let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return "{}" }
         return json
