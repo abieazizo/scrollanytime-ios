@@ -117,17 +117,19 @@ final class SaveToPhotosUITests: XCTestCase {
         let row = saveRow(app)
         var found = false
         // the More button of the clip on screen now, found once: XCTest's element queries are slow on this
-        // page (run 38651769742: 20 s between retries), and the lockup idles again 8 s after a touch
+        // page (run 38651769742: 20 s between retries), and the interface settles again 2.5 s after a touch
         guard let button = more.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) else {
             XCTFail("the More button left the screen")
             throw NoFeed()
         }
         note("More options at \(button.frame)")
         let point = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: button.frame.midX, dy: button.frame.midY))
-        // ONE TAP after watching (the owner's "one tap"): no touch for 9 s, so the clip's lockup has faded
-        // (8 s), then XCTest's own quick tap on More. Until d66f2c6 the page woke the lockup at that touch and
-        // iOS WebKit dropped the click (run 38642097942: nine misses). Recorded, not asserted — the web half
-        // ships on its own clock and the gate is about the shell; the line below is the evidence either way.
+        // ONE TAP after watching (the owner's "one tap"): no touch for 9 s, so the interface has settled (THE
+        // GHOST, 2026-10-28: 2.5 s into a clip the name card is gone and More is a 28 % ghost, still where it
+        // was), then XCTest's own quick tap on More. Until d66f2c6 the page woke the lockup at that touch and
+        // iOS WebKit dropped the click (run 38642097942: nine misses); the ghost brings nothing back before a
+        // button's click. Recorded, not asserted — the web half ships on its own clock and the gate is about
+        // the shell; the line below is the evidence either way.
         Thread.sleep(forTimeInterval: 9)
         point.tap()
         found = row.waitForExistence(timeout: 3)
