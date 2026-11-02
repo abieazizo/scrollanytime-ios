@@ -70,6 +70,16 @@ if [ -f ship/demo/walk-session ]; then
   exit $code
 fi
 
+# THE FIRST OPEN, MEASURED, on a mirror branch (incident 2026-11-02): with the marker ship/demo/walk-firstopen
+# present, the walk is ship/demo/walk-firstopen.sh — fresh install → the feed's first frame (A) and the welcome (B)
+# on the lte profile, and the network blocked around launch (C) — each launch on an erased Simulator, and nothing
+# else. The marker's `legs:` line picks the legs. Its log and summary go under crash/ (uploaded whatever they hold).
+if [ -f ship/demo/walk-firstopen ]; then
+  code=0
+  OUT="$OUT" UDID="$UDID" bash ship/demo/walk-firstopen.sh || code=$?
+  exit $code
+fi
+
 
 # -- naming things instead of pointing at them --------------------------------------------------
 AX="$OUT/ax"; mkdir -p "$AX"

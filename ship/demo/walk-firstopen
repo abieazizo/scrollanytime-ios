@@ -1,0 +1,3 @@
+THE FIRST OPEN, MEASURED (incident 2026-11-02): drive.sh runs ship/demo/walk-firstopen.sh when this file exists.
+Push it ONLY to a mirror branch (firstopen-proof), never to the mirror's main. The legs, in order:
+legs: A1 B1 C1 A2 B2 C30 A3 B3 C1old
