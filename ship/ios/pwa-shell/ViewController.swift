@@ -528,6 +528,8 @@ extension ViewController: WKScriptMessageHandler {
                 PowerBridge.post()
                 // …and the network as it is now: the document-start value was the one at launch
                 ReportBridge.postNetwork()
+                // …and whether VoiceOver is running (the feed never settles its interface under it)
+                ReportBridge.postVoiceOver()
                 // the Simulator walk's proof of the report bridge (dormant without -saSelfTest)
                 if ReportBridge.selfTest {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4) { ReportBridge.runSelfTest() }
