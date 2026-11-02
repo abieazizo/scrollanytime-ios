@@ -45,6 +45,7 @@ T_START=$(date +%s)
 BUDGET_S="${FIRSTOPEN_BUDGET_S:-1680}"   # the job has 45 min; ~9 go before the walk, ~3 after it
 LEGS="$(sed -n 's/^legs:[[:space:]]*//p' ship/demo/walk-firstopen | head -1)"
 LEGS="${LEGS:-A1 B1 C1 A2 B2 C30 A3 B3 C1old}"
+SETTLE="$(sed -n 's/^settle:[[:space:]]*//p' ship/demo/walk-firstopen | head -1)"; SETTLE="${SETTLE:-2}"
 echo "── THE FIRST OPEN, MEASURED ── $(date -u +%FT%TZ)  legs: $LEGS"
 echo "  tree: $(git rev-parse --short=12 HEAD 2>/dev/null) ($(git log -1 --format=%s 2>/dev/null | cut -c1-90))"
 echo "  live site: $(curl -s -m 10 https://scrollanytime.com/version)"
@@ -146,13 +147,13 @@ fresh_device() {  # $1 = the app to install
   done
   echo "  the Simulator's network: $([ -n "$ok" ] && echo "Safari loaded /health after $(python3 -c "print($i*1.5)") s" || echo "Safari did NOT show /health in 12 s")"
   xcrun simctl terminate "$UDID" com.apple.mobilesafari >/dev/null 2>&1 || true
-  sleep 2
+  sleep "$SETTLE"   # first-boot work (the erased device indexes, sets up, posts its banners) settles first
 }
 
 RESULTS="$FO/results.jsonl"
 : > "$RESULTS"
 run_leg() {  # $1 leg name
-  local leg="$1" kind args="" mode window release="" app="$APP_NEW" dir="$FO/$1"
+  local leg="$1" kind args="" mode window release="" nopath="" app="$APP_NEW" dir="$FO/$1"
   kind="${leg%%[0-9]*}"
   case "$leg" in
     A*) args="-saUITest"; mode=feed; window=20 ;;
@@ -160,6 +161,10 @@ run_leg() {  # $1 leg name
     C1old) mode=wall; window=26; release=3 ;;
     C30) mode=wall; window=56; release=30 ;;
     C*) mode=wall; window=26; release=3 ;;
+    # NO PATH AT ALL: the interface itself down for 30 s (NWPathMonitor then reports no path — the one case the
+    # offline page is for), then up. Its own run: the runner is unreachable meanwhile (a root timer brings the
+    # interface back even if this script dies).
+    N*) mode=wall; window=60; release="${leg#N}"; release="${release:-30}"; nopath=1 ;;
     *) echo "  unknown leg $leg"; return 1 ;;
   esac
   if [ "$leg" = "C1old" ]; then
@@ -169,16 +174,26 @@ run_leg() {  # $1 leg name
   echo; echo "══ leg $leg ($(basename "$app") from $(dirname "$app" | xargs basename); args '${args}'; mode $mode; window ${window}s${release:+; network blocked until ${release}s}) ══ $(date -u +%T)Z"
   fresh_device "$app" || { echo "  !! fresh device failed"; echo "{\"leg\":\"$leg\",\"ran\":false,\"why\":\"fresh device failed\"}" >> "$RESULTS"; return 1; }
   mkdir -p "$dir"
-  if [ -n "$release" ]; then
+  if [ -n "$nopath" ]; then
+    curl -s -m 8 -o /dev/null https://scrollanytime.com/health || true
+    sudo nohup sh -c "sleep $((release + 25)); ifconfig $IF up" >/dev/null 2>&1 &
+    sudo ifconfig "$IF" down
+    echo "  $IF down: $(ifconfig "$IF" | head -1)"
+    python3 ship/demo/firstopen-capture.py capture --udid "$UDID" --label "$leg" --dir "$dir" --window "$window" --launch-args="$args" --release-at "$release" --release-cmd "sudo ifconfig $IF up"
+    sudo ifconfig "$IF" up
+    local w
+    for w in $(seq 1 45); do curl -s -m 3 -o /dev/null https://scrollanytime.com/health && break; [ "$w" = 20 ] && sudo ipconfig set "$IF" DHCP; sleep 2; done
+    echo "  $IF back: $(ifconfig "$IF" | awk '/inet /{print $2}' | head -1); the network answered after ~$((w * 2)) s"
+  elif [ -n "$release" ]; then
     curl -s -m 8 -o /dev/null https://scrollanytime.com/health || true   # the name is in the host's cache
     net_block
     echo "  blocked: $(sudo pfctl -a firstopen -s rules 2>/dev/null | wc -l | tr -d ' ') rules on $IF"
-    python3 ship/demo/firstopen-capture.py capture --udid "$UDID" --label "$leg" --dir "$dir" --window "$window" --launch-args "$args" --release-at "$release" --release-cmd "$RELEASE_CMD"
+    python3 ship/demo/firstopen-capture.py capture --udid "$UDID" --label "$leg" --dir "$dir" --window "$window" --launch-args="$args" --release-at "$release" --release-cmd "$RELEASE_CMD"
   else
     sudo dscacheutil -flushcache >/dev/null 2>&1 || true; sudo killall -HUP mDNSResponder >/dev/null 2>&1 || true
     net_lte
     echo "  shaped: $(sudo dnctl list 2>/dev/null | grep -E '^0000[12]:' | tr -s ' ' | tr '\n' ';')"
-    python3 ship/demo/firstopen-capture.py capture --udid "$UDID" --label "$leg" --dir "$dir" --window "$window" --launch-args "$args"
+    python3 ship/demo/firstopen-capture.py capture --udid "$UDID" --label "$leg" --dir "$dir" --window "$window" --launch-args="$args" --record
   fi
   net_clear
   echo "  network cleared: $(sudo pfctl -a firstopen -s rules 2>/dev/null | wc -l | tr -d ' ') filter rules, $(sudo dnctl list 2>/dev/null | wc -l | tr -d ' ') dnctl lines"
@@ -230,7 +245,7 @@ build_old() {
 
 for leg in $LEGS; do
   el=$(( $(date +%s) - T_START ))
-  need=150; [ "$leg" = "C30" ] && need=190; [ "$leg" = "C1old" ] && need=260
+  need=150; [ "$leg" = "C30" ] && need=190; case "$leg" in N*) need=260 ;; esac; [ "$leg" = "C1old" ] && need=260
   if [ $((el + need)) -gt "$BUDGET_S" ]; then
     echo; echo "══ leg $leg NOT RUN: ${el}s of the walk's ${BUDGET_S}s budget used, it needs ~${need}s ══"
     echo "{\"leg\":\"$leg\",\"ran\":false,\"why\":\"time budget (${el}s used of ${BUDGET_S}s)\"}" >> "$RESULTS"
@@ -257,6 +272,12 @@ for r in rows:
     elif leg.startswith('B'):
         if ff: print(f'{leg:6} launch {r["launch_utc"]}  welcome seen by {ff["seen_by_ms"]} ms (not before {ff["not_before_ms"]} ms)  {"PASS" if ff["seen_by_ms"] < 4000 else "OVER 4000"}  | {ff["text"][:80]}')
         else: print(f'{leg:6} launch {r["launch_utc"]}  welcome NOT reached in the window  FAIL')
+    if leg[0] in 'AB':
+        vid = v.get('video') or {}
+        lv = vid.get('launch_visible') or {}; fd = vid.get('first_dark') or {}; fl = vid.get('first_lit') or {}
+        print(f'{"":6} clock: {"recording (" + str(vid.get("frames")) + " frames, " + str(vid.get("source")) + " timestamps)" if vid else "screenshots"}; launch visible at {lv.get("ms")} ms, '
+              f'dark launch still from {fd.get("ms")} ms, first lit frame {fl.get("ms")} ms (prev frame {fl.get("prev_frame_ms")} ms, lum {fl.get("lum")}); '
+              f'final screen: {((v.get("final_screenshot") or {}).get("text") or "")[:70]}')
     else:
         rel = v.get('released_ms'); fw = v.get('first_welcome'); wa = v.get('welcome_after_release_ms')
         walls = v.get('wall_frames') or []; after = v.get('wall_after_release') or []
