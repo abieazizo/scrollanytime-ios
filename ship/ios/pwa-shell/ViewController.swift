@@ -504,7 +504,9 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
                 webView.loadHTMLString(offlineFallbackHTML, baseURL: rootUrl)
                 return
             }
-            let waits: [TimeInterval] = [0.9, 2.2, 5, 10, 20, 30]
+            // capped at 10 s: a path that is blocked rather than missing has nothing to wake the retry, and
+            // the Simulator's 30-second outage was answered 16 s late at a 20 s step (2026-11-02, leg C30)
+            let waits: [TimeInterval] = [0.9, 2.2, 5, 10]
             retryFirstOpen(after: waits[min(firstOpenFailures - 1, waits.count - 1)])
             // a path and still no answer (our origin, not the phone): from the third failure, about eight
             // seconds in, one quiet line under the art says so — the web launch's own words (splash.markSlow)
