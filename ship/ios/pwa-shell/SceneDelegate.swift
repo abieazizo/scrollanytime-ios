@@ -115,11 +115,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             PowerBridge.start()
             PowerBridge.post()
         }
+        // THE LIFELINE (the 24-hour sweep, 2026-11-02): back in the foreground — the page's note reads
+        // "on screen" again (app/src/lib/lifeline.ts)
+        PWAShell.webView?.evaluateJavaScript("window.dispatchEvent(new Event('sa-active'))", completionHandler: nil)
     }
 
     func sceneWillResignActive(_ scene: UIScene) {
         // Called when the scene will move from an active state to an inactive state.
         // This may occur due to temporary interruptions (ex. an incoming phone call).
+        // THE LIFELINE (the 24-hour sweep, 2026-11-02): the app switcher, Control Centre, a call. WebKit
+        // still calls the page visible here, so a swipe-away in the switcher left a note saying "on
+        // screen" and the next launch filed "[exit] the page died on screen". The page is told now.
+        PWAShell.webView?.evaluateJavaScript("window.dispatchEvent(new Event('sa-resign'))", completionHandler: nil)
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {

@@ -1,8 +1,37 @@
 import UIKit
 import WebKit
 import AVFoundation
+import Network
 
 var webView: WKWebView! = nil
+
+/// THE FIRST OPEN'S NETWORK (incident 2026-11-02). Whether the phone has a usable path at all, known from
+/// launch — the offline page may show only when it has none (see didFailProvisionalNavigation). Started in
+/// viewDidLoad, before the first navigation; `unknown` until NWPathMonitor answers (a few milliseconds),
+/// and unknown never counts as offline.
+enum FirstOpenNet {
+    private static let monitor = NWPathMonitor()
+    private static var started = false
+    private(set) static var status: NWPath.Status? = nil
+    /// called on the main queue when a path appears after there was none
+    static var onSatisfied: (() -> Void)?
+
+    static func start() {
+        guard !started else { return }
+        started = true
+        monitor.pathUpdateHandler = { path in
+            DispatchQueue.main.async {
+                let was = status
+                status = path.status
+                if path.status == .satisfied && was != .satisfied { onSatisfied?() }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.scrollanytime.firstopen"))
+    }
+
+    /// true only when iOS says there is no path — never on "not known yet"
+    static var offline: Bool { status != nil && status != .satisfied }
+}
 
 class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteractionControllerDelegate {
     enum LoadingMode {
@@ -41,6 +70,10 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     // build cold in airplane mode has not, and that is the case the bundled fallback exists for.
     var hasEverLoaded = false;
     var showingOfflineFallback = false;
+    /// the first navigation's failures in a row on this launch, and the last one's error (incident 2026-11-02)
+    private var firstOpenFailures = 0
+    private var firstOpenLastError = ""
+    private var firstOpenRetry: DispatchWorkItem?
     /// The page the web view last COMMITTED to. A navigation that fails provisionally leaves this
     /// page on screen, whole and working — so when it is ours, a failed extra navigation is no
     /// reason to tear the app down (see didFailProvisionalNavigation).
@@ -80,6 +113,14 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
         super.viewDidLoad()
         initWebView()
         initToolbarView()
+        // the path is known before the first navigation can fail; a path that comes back while the
+        // offline page is up takes the person in without a tap (the page's own 'online' listener is a
+        // synthetic document's and is not to be trusted)
+        FirstOpenNet.onSatisfied = { [weak self] in
+            guard let self = self, self.showingOfflineFallback, !self.hasEverLoaded else { return }
+            self.retryFirstOpen(after: 0.3)
+        }
+        FirstOpenNet.start()
         loadRootUrl()
     
         NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification , object: nil)
@@ -224,6 +265,25 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
         if UITestHooks.wipeWebDataOnce({ [weak self] in self?.loadRootUrl(cachePolicy: cachePolicy) }) { return }
         armLoadingPage()
         PWAShell.webView.load(URLRequest(url: SceneDelegate.universalLinkToLaunch ?? SceneDelegate.shortcutLinkToLaunch ?? UITestHooks.startURL ?? rootUrl, cachePolicy: cachePolicy))
+    }
+
+    /// The first navigation failed with a path, or before two retries: try it again behind the loading
+    /// still (its 0.8 s light-up and the breathing hairline are the "quiet retry"), never the offline page.
+    func retryFirstOpen(after delay: TimeInterval) {
+        firstOpenRetry?.cancel()
+        htmlIsLoaded = false
+        if showingOfflineFallback {
+            showingOfflineFallback = false
+        }
+        resetLoadingPage()
+        loadingView.isHidden = false
+        animateConnectionProblem(false)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self, !self.hasEverLoaded else { return }
+            self.loadRootUrl()
+        }
+        firstOpenRetry = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // MARK: - the loading page
@@ -396,13 +456,29 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
         //
         // Only for the first navigation. Once the app has loaded once, the web app's own offline
         // screen and its cached clips take over, and the retry loop below is the right behaviour.
+        //
+        // THE OFFLINE RULE (incident 2026-11-02: phones WITH signal were shown this page). It used to come
+        // up on the FIRST failure of the first navigation — no retry, no look at the network — so one
+        // dropped request on a cellular hand-off, a TLS hiccup or a timeout read as "needs a connection".
+        // Now it shows only when iOS says there is NO network path AND two retries have failed
+        // (shared/src/bootRetry.ts is the web app's copy of the same rule). Anything else is retried
+        // quietly behind the loading still — 0.9 s, 2.2 s, then a back-off that settles at 30 s — and the
+        // page is told what happened once it is up (`__saShell.firstOpen`), so the boot can report it.
         if !hasEverLoaded {
-            showingOfflineFallback = true
-            resetLoadingPage()
-            loadingView.isHidden = true
-            animateConnectionProblem(false)
-            webView.isHidden = false
-            webView.loadHTMLString(offlineFallbackHTML, baseURL: rootUrl)
+            let ns = error as NSError
+            firstOpenFailures += 1
+            firstOpenLastError = "\(ns.domain) \(ns.code)"
+            if FirstOpenNet.offline && firstOpenFailures > 2 {
+                showingOfflineFallback = true
+                resetLoadingPage()
+                loadingView.isHidden = true
+                animateConnectionProblem(false)
+                webView.isHidden = false
+                webView.loadHTMLString(offlineFallbackHTML, baseURL: rootUrl)
+                return
+            }
+            let waits: [TimeInterval] = [0.9, 2.2, 5, 10, 20, 30]
+            retryFirstOpen(after: waits[min(firstOpenFailures - 1, waits.count - 1)])
             return
         }
 
@@ -536,6 +612,11 @@ extension ViewController: WKScriptMessageHandler {
                 }
                 showingOfflineFallback = false
                 hasEverLoaded = true
+                firstOpenRetry?.cancel()
+                // what the first open went through before this page could paint, for the boot's report
+                // (App.tsx reportReady reads __saShell.firstOpen): 0 failures is the normal launch
+                let firstOpen = "{ failures: \(firstOpenFailures), error: \(ReportBridge.jsonString(firstOpenLastError)) }"
+                PWAShell.webView.evaluateJavaScript("window.__saShell = Object.assign(window.__saShell || {}, { firstOpen: \(firstOpen) })", completionHandler: nil)
                 revealWeb()
                 // a notification tapped while the app was closed: its deep link, now that the page is up
                 NotifyBridge.flushPending()

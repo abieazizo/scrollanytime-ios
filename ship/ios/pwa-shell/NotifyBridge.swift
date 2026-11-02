@@ -311,7 +311,7 @@ enum ReportBridge {
         return json
     }
 
-    private static func jsonString(_ s: String) -> String {
+    static func jsonString(_ s: String) -> String {
         guard let data = try? JSONSerialization.data(withJSONObject: s, options: [.fragmentsAllowed]),
               let json = String(data: data, encoding: .utf8) else { return "\"\"" }
         return json
