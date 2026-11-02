@@ -102,7 +102,7 @@ final class SaveToPhotosUITests: XCTestCase {
         let deadline = Date().addingTimeInterval(120)
         var target: XCUIElement?
         while Date() < deadline, target == nil {
-            target = more.allElementsBoundByIndex.first { onScreen($0, in: app) }
+            target = more.allElementsBoundByIndex.first { $0.exists && $0.isHittable }
             if target == nil { Thread.sleep(forTimeInterval: 1) }
         }
         guard target != nil else {
@@ -118,7 +118,7 @@ final class SaveToPhotosUITests: XCTestCase {
         var found = false
         // the More button of the clip on screen now, found once: XCTest's element queries are slow on this
         // page (run 38651769742: 20 s between retries), and the interface settles again 2.5 s after a touch
-        guard let button = more.allElementsBoundByIndex.first(where: { onScreen($0, in: app) }) else {
+        guard let button = more.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) else {
             XCTFail("the More button left the screen")
             throw NoFeed()
         }
@@ -156,17 +156,6 @@ final class SaveToPhotosUITests: XCTestCase {
         }
         XCTAssertTrue(found, "the More sheet has no \"Save to Photos\" row")
         return app
-    }
-
-    /// There and inside the window — not XCTest's isHittable. Since THE GHOST went live (2026-10-29) More sits at
-    /// 28 % 2.5 s into a clip, and on a slow first launch (the first-time and denied paths, right after a privacy
-    /// reset) the gate never once found it hittable in 120 s (runs 41417426898, 41420824049), while the granted
-    /// launch, which found it before the settle, tapped it and saved. The test presses More by its frame anyway.
-    private func onScreen(_ e: XCUIElement, in app: XCUIApplication) -> Bool {
-        guard e.exists else { return false }
-        let f = e.frame
-        let w = app.windows.firstMatch.frame
-        return !f.isEmpty && w.contains(CGPoint(x: f.midX, y: f.midY))
     }
 
     private func saveRow(_ app: XCUIApplication) -> XCUIElement {
