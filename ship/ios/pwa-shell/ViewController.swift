@@ -286,6 +286,32 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    /// "Still connecting…" under the loading art while the first open keeps retrying with a path (2026-11-02):
+    /// never a question, nothing to tap; it goes when the page paints or the offline page takes over
+    private var stillConnecting: UILabel?
+    func showStillConnecting() {
+        guard stillConnecting == nil, let host = loadingView else { return }
+        let l = UILabel()
+        l.text = "Still connecting…"
+        l.textColor = UIColor(red: 0.961, green: 0.949, blue: 0.918, alpha: 0.72)
+        l.font = UIFont.systemFont(ofSize: 15, weight: .regular)
+        l.adjustsFontForContentSizeCategory = true
+        l.textAlignment = .center
+        l.translatesAutoresizingMaskIntoConstraints = false
+        l.alpha = 0
+        host.addSubview(l)
+        NSLayoutConstraint.activate([
+            l.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+            l.bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor, constant: -72),
+        ])
+        stillConnecting = l
+        UIView.animate(withDuration: 0.4) { l.alpha = 1 }
+    }
+    func hideStillConnecting() {
+        stillConnecting?.removeFromSuperview()
+        stillConnecting = nil
+    }
+
     // MARK: - the loading page
 
     /// A load is starting: give the page SLOW_AFTER seconds to paint before the still lights up.
@@ -469,6 +495,7 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
             firstOpenFailures += 1
             firstOpenLastError = "\(ns.domain) \(ns.code)"
             if FirstOpenNet.offline && firstOpenFailures > 2 {
+                hideStillConnecting()
                 showingOfflineFallback = true
                 resetLoadingPage()
                 loadingView.isHidden = true
@@ -479,6 +506,9 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
             }
             let waits: [TimeInterval] = [0.9, 2.2, 5, 10, 20, 30]
             retryFirstOpen(after: waits[min(firstOpenFailures - 1, waits.count - 1)])
+            // a path and still no answer (our origin, not the phone): from the third failure, about eight
+            // seconds in, one quiet line under the art says so — the web launch's own words (splash.markSlow)
+            if firstOpenFailures >= 3 { showStillConnecting() }
             return
         }
 
@@ -613,6 +643,7 @@ extension ViewController: WKScriptMessageHandler {
                 showingOfflineFallback = false
                 hasEverLoaded = true
                 firstOpenRetry?.cancel()
+                hideStillConnecting()
                 // what the first open went through before this page could paint, for the boot's report
                 // (App.tsx reportReady reads __saShell.firstOpen): 0 failures is the normal launch
                 let firstOpen = "{ failures: \(firstOpenFailures), error: \(ReportBridge.jsonString(firstOpenLastError)) }"
