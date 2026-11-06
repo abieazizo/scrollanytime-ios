@@ -20,6 +20,7 @@
 		5A51A0052026100800000005 /* DeviceId.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0042026100800000004 /* DeviceId.swift */; };
 		5A51A0062026101400000006 /* SaveToPhotos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0072026101400000007 /* SaveToPhotos.swift */; };
 		5A51A0112026101400000011 /* SaveToPhotosUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0102026101400000010 /* SaveToPhotosUITests.swift */; };
+		5A51A0212026110200000021 /* GateWalkUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A51A0202026110200000020 /* GateWalkUITests.swift */; };
 		595F23AF25CEFBFE0053416C /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595F23A425CEFBFE0053416C /* WebView.swift */; };
 		CDC0FE292388222C002C8D56 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CDC0FE252388222B002C8D56 /* Main.storyboard */; };
 		CDC0FE2A2388222C002C8D56 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = CDC0FE272388222B002C8D56 /* LaunchScreen.storyboard */; };
@@ -51,6 +52,7 @@
 		5A51A0042026100800000004 /* DeviceId.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DeviceId.swift; path = "pwa-shell/DeviceId.swift"; sourceTree = "<group>"; };
 		5A51A0072026101400000007 /* SaveToPhotos.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SaveToPhotos.swift; path = "pwa-shell/SaveToPhotos.swift"; sourceTree = "<group>"; };
 		5A51A0102026101400000010 /* SaveToPhotosUITests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = SaveToPhotosUITests.swift; path = "pwa-shellUITests/SaveToPhotosUITests.swift"; sourceTree = "<group>"; };
+		5A51A0202026110200000020 /* GateWalkUITests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = GateWalkUITests.swift; path = "pwa-shellUITests/GateWalkUITests.swift"; sourceTree = "<group>"; };
 		5A51A0122026101400000012 /* pwa-shellUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "pwa-shellUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		595F23A425CEFBFE0053416C /* WebView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = WebView.swift; path = "pwa-shell/WebView.swift"; sourceTree = "<group>"; };
 		CDC0FE262388222B002C8D56 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = "pwa-shell/Base.lproj/Main.storyboard"; sourceTree = "<group>"; };
@@ -112,6 +114,7 @@
 			isa = PBXGroup;
 			children = (
 				5A51A0102026101400000010 /* SaveToPhotosUITests.swift */,
+				5A51A0202026110200000020 /* GateWalkUITests.swift */,
 			);
 			name = "pwa-shellUITests";
 			sourceTree = "<group>";
@@ -241,6 +244,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5A51A0112026101400000011 /* SaveToPhotosUITests.swift in Sources */,
+				5A51A0212026110200000021 /* GateWalkUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
