@@ -128,7 +128,10 @@ back_to_welcome() {  # after a sheet or a page: wait for the welcome's own words
 legal_back() {
   local box x0 y0 x1 y1 at
   # on the welcome the legal page is an overlay closed by its fixed "Done" pill (Onboarding.tsx .ob-legal-close)
+  # (fixed top: sat+10, right: 14, ~36 pt tall; the overlay HIDES the page's own chevron)
   if at=$(find_word "Done"); then ev "legal back: tap 'Done' at $at"; tapxy $at; return 0; fi
+  ev "!! 'Done' not read; tapping the pill's spot top-right"; tapxy $((W - 46)) $((SAT + 28)); sleep 1
+  if on_welcome; then return 0; fi
   if box=$(line_box "$1"); then
     read -r x0 y0 x1 y1 <<<"$box"
     ev "legal back: title '$1' box $box → tap $((x0 + 19)) $((y0 - 30))"
