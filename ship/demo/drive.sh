@@ -126,7 +126,9 @@ back_to_welcome() {  # after a sheet or a page: wait for the welcome's own words
 }
 # the legal page's chevron: a 38 pt button 6 pt above the page title, its left edge the title's left edge
 legal_back() {
-  local box x0 y0 x1 y1
+  local box x0 y0 x1 y1 at
+  # on the welcome the legal page is an overlay closed by its fixed "Done" pill (Onboarding.tsx .ob-legal-close)
+  if at=$(find_word "Done"); then ev "legal back: tap 'Done' at $at"; tapxy $at; return 0; fi
   if box=$(line_box "$1"); then
     read -r x0 y0 x1 y1 <<<"$box"
     ev "legal back: title '$1' box $box → tap $((x0 + 19)) $((y0 - 30))"
