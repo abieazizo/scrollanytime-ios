@@ -78,7 +78,12 @@ final class SignInWithApple: NSObject, ASAuthorizationControllerDelegate, ASAuth
         }
         let ns = error as NSError
         let why = ns.localizedDescription.prefix(60)
-        dispatch(["ok": false, "error": "\(name) [\(ns.domain) \(ns.code)] \(why)"])
+        // …AND THE REASON UNDER APPLE'S CODE (the Error Doctor, 2026-11-04): every person's line that week read
+        // `unknown [… AuthorizationError 1000]`, which cannot tell a phone with no Apple ID or Sign in with Apple
+        // restricted from a sheet that failed once (two of the three were signed in seconds later). Apple's own
+        // underlying error, when there is one, rides before the description so the page's bound keeps it.
+        let under = (ns.userInfo[NSUnderlyingErrorKey] as? NSError).map { " <\($0.domain) \($0.code)>" } ?? ""
+        dispatch(["ok": false, "error": "\(name) [\(ns.domain) \(ns.code)]\(under) \(why)"])
     }
 
     private func dispatch(_ detail: [String: Any]) {
