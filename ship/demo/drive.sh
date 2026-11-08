@@ -1,378 +1,374 @@
 #!/usr/bin/env bash
-# Drive the REAL Scroll Anytime binary on iOS in the Simulator and record it, so App Review's
-# item 1 (a video of the app in use, starting at launch) can be answered without a physical
-# device in the room. Every touch here is a real touch delivered to the app by idb -- nothing is
-# simulated in a browser and nothing is composited afterwards.
+# THE ONBOARDING AUDIT (the owner, 2026-11-08) — CAPTURE ONLY. On a mirror branch, never main.
 #
-#   MODE=calibrate  walk the flow, screenshot every step, record nothing   (coordinate discovery)
-#   MODE=record     same walk with the video running                        (the deliverable)
-set -euo pipefail
+# The REAL shell, built by this workflow from the App Store 1.1.6 (40) tree (mirror main 72a2f7d), on a NEWLY
+# CREATED Simulator per device (cleared storage, no account, notifications never asked), against the live site.
+# Every touch is a real idb touch. NOTHING HERE SIGNS IN, NOTHING IS TYPED, NO FORM IS SENT:
+#   first-open  Home Screen → tap the icon → launch → splash → welcome (held) → Sign in with Apple (the system
+#               sheet, dismissed) → Continue with Google (the consent alert, Google's first page, cancelled) →
+#               Terms → back → Privacy Policy → back → Continue with email (the email step; nothing typed)
+#   relaunch    quit, back to the Home Screen, tap the icon again
+# Each leg is one recording. Everything lands under crash/ (the workflow uploads it whatever it holds):
+#   <dev>-<leg>.mp4 (re-encoded, every frame kept at its own time) · <dev>-<leg>-raw.* (when small)
+#   <dev>-<leg>-events.jsonl (the epoch of every step) · <dev>-<leg>-frames.csv · shots/ · ocr/ · audit-log.txt
+set -uo pipefail
 
-UDID="${UDID:?boot a simulator first}"
-BUNDLE=com.scrollanytime.app
 OUT="${OUT:-ship/build/demo}"
-mkdir -p "$OUT/shots"
+CAP="$OUT/crash"
+mkdir -p "$OUT/shots" "$OUT/ax" "$CAP/shots" "$CAP/ocr" "$CAP/ax"
+LOG="$CAP/audit-log.txt"
+exec > >(tee -a "$LOG") 2>&1
+BUNDLE=com.scrollanytime.app
+APP="$(find ship/build/sim/Build/Products -maxdepth 2 -name '*.app' | head -1)"
+T_START=$(date +%s)
+BUDGET_S="${AUDIT_BUDGET_S:-2100}"   # the job has 45 min; ~3 go before this script, ~2 after it
+DEVICES_LIST="${AUDIT_DEVICES:-iPhone 15 Pro|iPhone SE (3rd generation)}"
 
-# Screen size in POINTS. The screenshot is the only thing on the runner that knows for certain,
-# so read the PNG header and divide by the device scale.
-xcrun simctl io "$UDID" screenshot "$OUT/.probe.png" >/dev/null 2>&1
-read -r PW PH SCALE <<<"$(python3 -c "
-import struct, sys
-w, h = struct.unpack('>II', open(sys.argv[1],'rb').read()[16:24])
-print(w, h, 3 if w >= 1100 else 2)" "$OUT/.probe.png")"
-W=$((PW / SCALE)); H=$((PH / SCALE))
-echo "screen ${W}x${H} points (scale ${SCALE}, raster ${PW}x${PH})"
+echo "── THE ONBOARDING AUDIT ── $(date -u +%FT%TZ)"
+echo "app: $APP"
+[ -n "$APP" ] || { echo "!! no .app was built"; exit 1; }
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist" 2>/dev/null | tr '\n' ' '; echo
+echo "mirror commit: $(git rev-parse HEAD 2>/dev/null)"
+echo "live site: $(curl -s -m 15 https://scrollanytime.com/version)"
+sw_vers | tr '\n' ' '; echo; xcodebuild -version | head -2 | tr '\n' ' '; echo
 
-# Fractions measured off the live app at iPhone width (scripts/_demo_coords.mjs). The bottom nav
-# sits 42pt above the web viewport's bottom edge and the shell's viewport runs under the home
-# indicator, so NAV_UP carries that inset and is tunable from the workflow.
-NAV_UP="${NAV_UP:-76}"
-NAVY=$((H - NAV_UP))
-fx() { python3 -c "print(int($1 * $W))"; }
-fy() { python3 -c "print(int($1 * $H))"; }
-FEED_X=$(fx 0.2505); TORAH_X=$(fx 0.4123); RABBIS_X=$(fx 0.5856); PROFILE_X=$(fx 0.7401)
-RAIL_X=$(fx 0.9008); SAVE_Y=$(fy 0.5668)
-MID_X=$((W / 2)); MID_Y=$((H / 2))
-echo "nav y=$NAVY  tabs: feed=$FEED_X torah=$TORAH_X rabbis=$RABBIS_X profile=$PROFILE_X"
-
-# THE SAVE TO PHOTOS GATE, on a mirror branch (2026-10-14): with the marker ship/demo/walk-photos present,
-# the walk is the XCUITest (ship/ios/uitest-photos.sh) on this Simulator — the very run the release's
-# signing lane gates on — and nothing else. Nothing is signed or uploaded from this workflow. Results go
-# where the workflow uploads them: screenshots under shots/, the summary and each path's log under ax/.
-if [ -f ship/demo/walk-photos ]; then
-  mkdir -p "$OUT/ax" "$OUT/shots"
-  # `|| code=$?`: this script runs under set -e, and a red gate must still leave its pictures behind
-  code=0
-  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-photos.sh || code=$?
-  cp "$OUT"/uitest/*.png "$OUT/shots/" 2>/dev/null || true
-  cp "$OUT/uitest/summary.json" "$OUT/ax/uitest-summary.json" 2>/dev/null || true
-  for f in "$OUT"/uitest/*.log; do
-    [ -f "$f" ] || continue
-    python3 -c "import json,sys; print(json.dumps({'log': open(sys.argv[1], errors='replace').read()[-80000:]}))" "$f" > "$OUT/ax/uitest-$(basename "$f" .log).json"
-  done
-  exit $code
+# ffmpeg for the end (the runner may not carry it): installed while the walk runs
+FFMPEG="$(command -v ffmpeg || true)"
+BREW_PID=""
+if [ -z "$FFMPEG" ]; then
+  ( HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 HOMEBREW_NO_ANALYTICS=1 brew install ffmpeg > "$CAP/brew-ffmpeg.log" 2>&1; echo "brew exit $?" >> "$CAP/brew-ffmpeg.log" ) &
+  BREW_PID=$!
 fi
 
-# STILL SIGNED IN, on a mirror branch (the owner's P0, 2026-10-22): with the marker ship/demo/walk-session
-# present, the walk is the shell's session XCUITest (ship/ios/uitest-session.sh: the page's session kept in
-# the Keychain, the whole web data store wiped on relaunch, the same person back) — the run the release's
-# signing lane gates on after Save to Photos — and nothing else. Nothing is signed or uploaded.
-if [ -f ship/demo/walk-session ]; then
-  mkdir -p "$OUT/ax" "$OUT/shots"
-  code=0
-  OUT="$OUT/uitest" UDID="$UDID" bash ship/ios/uitest-session.sh || code=$?
-  cp "$OUT"/uitest/*.png "$OUT/shots/" 2>/dev/null || true
-  cp "$OUT/uitest/session-summary.json" "$OUT/ax/uitest-session-summary.json" 2>/dev/null || true
-  for f in "$OUT"/uitest/*.log; do
-    [ -f "$f" ] || continue
-    python3 -c "import json,sys; print(json.dumps({'log': open(sys.argv[1], errors='replace').read()[-80000:]}))" "$f" > "$OUT/ax/uitest-$(basename "$f" .log).json"
+OCRW="$OUT/ocrw-bin"
+swiftc -O ship/demo/ocrw.swift -o "$OCRW" > "$CAP/ocrw-build.log" 2>&1 || { echo "!! ocrw did not compile:"; cat "$CAP/ocrw-build.log"; exit 1; }
+
+# the workflow's own device is not used: every device here is created new
+[ -n "${UDID:-}" ] && xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
+pkill -f idb_companion >/dev/null 2>&1 || true
+# the software keyboard, as on a phone (a Mac keyboard "connected" hides it)
+defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false || true
+
+RT=$(xcrun simctl list runtimes -j | python3 -c "
+import json,sys
+rs=[r for r in json.load(sys.stdin)['runtimes'] if r.get('isAvailable') and r.get('platform','iOS')=='iOS']
+rs.sort(key=lambda r: [int(x) for x in r['version'].split('.')])
+print(rs[-1]['identifier'] if rs else '')")
+echo "runtime: $RT"
+devtype() { xcrun simctl list devicetypes -j | python3 -c "
+import json,sys
+w=sys.argv[1]
+print(next((d['identifier'] for d in json.load(sys.stdin)['devicetypes'] if d['name']==w), ''))" "$1"; }
+
+# ── helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
+ts() { python3 -c 'import time; print(f"{time.time():.3f}")'; }
+EVENTS=/dev/null
+ev() {
+  local t; t=$(ts)
+  python3 -c 'import json,sys; print(json.dumps({"t": float(sys.argv[1]), "ev": sys.argv[2]}))' "$t" "$1" >> "$EVENTS"
+  echo "  [$t] $1"
+}
+screen_points() {
+  xcrun simctl io "$U" screenshot "$OUT/.probe.png" >/dev/null 2>&1
+  read -r PW PH SCALE <<<"$(python3 -c "
+import struct,sys
+w,h=struct.unpack('>II',open(sys.argv[1],'rb').read()[16:24]); print(w,h,3 if w>=1100 else 2)" "$OUT/.probe.png")"
+  W=$((PW / SCALE)); H=$((PH / SCALE))
+  echo "screen ${W}x${H} points (scale ${SCALE}, raster ${PW}x${PH})"
+}
+# a lossless screenshot of the moment (its words are read at the END: Vision on a busy runner would slow the app)
+shot() {
+  local f="$CAP/shots/$DEV-$1.png"
+  xcrun simctl io "$U" screenshot "$f" >/dev/null 2>&1 || true
+  ev "shot $1"
+}
+axdump() { idb ui describe-all --udid "$U" > "$CAP/ax/$DEV-$1.json" 2>/dev/null || true; }
+tapxy() {
+  idb ui tap --udid "$U" "$1" "$2" 2>>"$CAP/idb-errors.log" || idb ui tap "$1" "$2" 2>>"$CAP/idb-errors.log"
+}
+# find_word "<words>" : the centre of those words on a fresh screenshot, in POINTS — exit 3 when absent
+find_word() {
+  xcrun simctl io "$U" screenshot "$OUT/.find.png" >/dev/null 2>&1 || return 2
+  local at fx fy
+  at=$("$OCRW" "$OUT/.find.png" --word "$1" --fast 2>>"$CAP/ocr-errors.log") ||     at=$("$OCRW" "$OUT/.find.png" --word "$1" 2>>"$CAP/ocr-errors.log") || return 3
+  read -r fx fy <<<"$at"
+  python3 -c "print(int($fx*$W), int($fy*$H))"
+}
+# line_box "<exact line>" : "x0 y0 x1 y1" in POINTS
+line_box() {
+  xcrun simctl io "$U" screenshot "$OUT/.find.png" >/dev/null 2>&1 || return 2
+  local at
+  at=$("$OCRW" "$OUT/.find.png" --line "$1" --fast 2>>"$CAP/ocr-errors.log") ||     at=$("$OCRW" "$OUT/.find.png" --line "$1" 2>>"$CAP/ocr-errors.log") || return 3
+  python3 -c "
+import sys
+x0,y0,x1,y1=map(float,sys.argv[1].split()); W,H=int(sys.argv[2]),int(sys.argv[3])
+print(int(x0*W), int(y0*H), int(x1*W), int(y1*H))" "$at" "$W" "$H"
+}
+wait_word() {  # $1 words, $2 seconds → "x y"
+  local end=$(( $(date +%s) + ${2:-20} )) at
+  while [ "$(date +%s)" -lt "$end" ]; do
+    if at=$(find_word "$1"); then echo "$at"; return 0; fi
+    sleep 0.6
   done
-  exit $code
-fi
-
-
-# -- naming things instead of pointing at them --------------------------------------------------
-AX="$OUT/ax"; mkdir -p "$AX"
-axdump() { idb ui describe-all --udid "$UDID" > "$AX/$1.json" 2>/dev/null || true; }
-
-# tap_named <label> [--contains] : poll for a control BY NAME, tap it, and say whether it landed.
-# Every coordinate in this driver that was measured off a screenshot has at some point landed on
-# the wrong thing: on a different device, or one second too early. Names do not move.
-tap_named() {
-  want="$1"; shift
-  mode="${1:-}"
-  for t in 1 2 3 4 5 6 7 8; do
-    if c=$(idb ui describe-all --udid "$UDID" 2>/dev/null | python3 ship/demo/find-element.py "$want" $mode 2>>"$OUT/ax.log"); then
-      echo "  tap_named '$want' -> $c"
-      idb ui tap --udid "$UDID" $c
-      return 0
-    fi
-    sleep 1.5
-  done
-  echo "  tap_named '$want' NOT FOUND after 12s"
   return 1
 }
-
-shot()  { xcrun simctl io "$UDID" screenshot "$OUT/shots/$1.png" >/dev/null 2>&1 || true; echo "  . shot $1"; }
-tap()   { idb ui tap --udid "$UDID" "$1" "$2"; sleep "${3:-1.2}"; }
-swipe() { idb ui swipe --udid "$UDID" "$1" "$2" "$3" "$4" --duration "${5:-0.16}"; sleep "${6:-2.2}"; }
-
-idb ui button --udid "$UDID" HOME || true
-sleep 2
-idb ui button --udid "$UDID" HOME || true   # a second press leaves page 1, wherever we were
-sleep 2
-
-# Apple asked for the launch itself, so find our icon on the Home Screen and tap it like a person.
-# A freshly installed app is not on page 1 of a clean Simulator, so walk the pages. The template is
-# the icon iOS rasterised into the bundle, which is exactly what Springboard draws.
-FOUND=""
-for page in 0 1 2 3; do
-  shot "00-home-p$page"
-  # Ask Springboard what the icons ARE, rather than guessing from pixels.
-  if COORD=$(idb ui describe-all --udid "$UDID" 2>/dev/null | python3 ship/demo/find-icon-ax.py "Scroll Anytime" 2>>"$OUT/find-icon.log"); then
-    echo "  icon found by name on page $page at $COORD"
-    cp "$OUT/shots/00-home-p$page.png" "$OUT/shots/00-home.png"
-    FOUND="$COORD"
-    break
+tap_word() {  # $1 words, $2 seconds to wait for them
+  local at
+  at=$(wait_word "$1" "${2:-12}") || { ev "!! '$1' is not on screen"; return 1; }
+  ev "tap '$1' at $at"
+  tapxy $at
+}
+on_welcome() { find_word "Continue with email" >/dev/null; }
+back_to_welcome() {  # after a sheet or a page: wait for the welcome's own words
+  local at
+  if at=$(wait_word "Continue with email" "${1:-8}"); then ev "the welcome is back"; return 0; fi
+  ev "!! the welcome did not come back"; return 1
+}
+# the legal page's chevron: a 38 pt button 6 pt above the page title, its left edge the title's left edge
+legal_back() {
+  local box x0 y0 x1 y1
+  if box=$(line_box "$1"); then
+    read -r x0 y0 x1 y1 <<<"$box"
+    ev "legal back: title '$1' box $box → tap $((x0 + 19)) $((y0 - 30))"
+    tapxy $((x0 + 19)) $((y0 - 30))
+  else
+    ev "!! title '$1' not found; tapping the top-left chevron spot"
+    tapxy 30 $((SAT + 26))
   fi
-  echo "  not on page $page"
-  swipe $((W * 4 / 5)) $((H / 2)) $((W / 5)) $((H / 2)) 0.25 1.8
-done
+}
 
-if [ -n "$FOUND" ]; then
-  tap $FOUND 8
-else
-  echo "  !! icon not located on any page - falling back to simctl launch (see $OUT/find-icon.log)"
-  xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
-  sleep 8
-fi
+REC_PID=""; REC_RAW=""; RAWS=()
+rec_start() {
+  REC_RAW="$OUT/.rec-$DEV-$1.mp4"; local err="$OUT/.rec-$DEV-$1.log"
+  xcrun simctl io "$U" recordVideo --codec h264 --force "$REC_RAW" > "$err" 2>&1 &
+  REC_PID=$!
+  local i
+  for i in $(seq 1 120); do grep -qi "recording started" "$err" 2>/dev/null && break; sleep 0.25; done
+  ev "recording started: $(tr '\n' ' ' < "$err" | cut -c1-140)"
+  sleep 2
+}
+rec_stop() {
+  sleep 1
+  kill -INT "$REC_PID" 2>/dev/null || true
+  local i
+  for i in $(seq 1 120); do kill -0 "$REC_PID" 2>/dev/null || break; sleep 0.5; done
+  ev "recording stopped"
+  ls -la "$REC_RAW" || true
+  ffprobe -v error -select_streams v:0 -show_entries frame=pts_time,pkt_dts_time,best_effort_timestamp_time \
+    -of csv=p=0 "$REC_RAW" > "$CAP/$DEV-$1-frames.csv" 2>/dev/null || true
+  echo "  frames: $(wc -l < "$CAP/$DEV-$1-frames.csv" | tr -d ' ')  duration: $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$REC_RAW" 2>/dev/null)"
+  RAWS+=("$REC_RAW|$DEV-$1")
+}
 
-# Did OUR app actually come to the front? An earlier run tapped Wallet and cheerfully walked the
-# whole flow inside it, so this is not optional. Poll rather than check once: a cold launch on a
-# just-booted Simulator is not instant, and a system alert left on screen can delay it further.
-# iOS 26 simulators no longer label the process "UIKitApplication:<bundle>" in launchctl — match the
-# bundle id anywhere, and accept a running process reported by simctl as well (2026-09-14 the walk
-# declared a launched app "not up" three times and bailed with the recording already rolling).
-front() {
-  xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q "$BUNDLE" && return 0
-  xcrun simctl spawn "$UDID" launchctl print system 2>/dev/null | grep -q "$BUNDLE" && return 0
-  pgrep -f "$BUNDLE" >/dev/null 2>&1 && return 0
+find_icon() {  # the Home Screen, walked page by page until Springboard names our icon → "x y"
+  local page c
+  idb ui button --udid "$U" HOME >/dev/null 2>&1 || true; sleep 1.5
+  idb ui button --udid "$U" HOME >/dev/null 2>&1 || true; sleep 1.5
+  for page in 0 1 2 3; do
+    if c=$(idb ui describe-all --udid "$U" 2>/dev/null | python3 ship/demo/find-icon-ax.py "Scroll Anytime" 2>>"$CAP/find-icon.log"); then
+      echo "$c"; return 0
+    fi
+    if c=$(find_word "Scroll Anytime"); then   # the label under the icon; the icon is ~38 pt above it
+      read -r cx cy <<<"$c"; echo "$cx $((cy - 38))"; return 0
+    fi
+    idb ui swipe --udid "$U" $((W * 4 / 5)) $((H / 2)) $((W / 5)) $((H / 2)) --duration 0.25 >/dev/null 2>&1 || true
+    sleep 1.8
+  done
   return 1
 }
-for attempt in 1 2 3; do
-  for t in 1 2 3 4 5 6; do front && break; sleep 3; done
-  if front; then echo "  $BUNDLE is running"; break; fi
-  echo "  !! $BUNDLE not up (attempt $attempt) - launching it directly"
-  xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-done
-# the sign-in and notify walks relaunch the app themselves, so a flaky "in front" reading is not the end of it
-# there (run 38112671754: "is running", then "could not get … to the front", and the walk never ran)
-front || { echo "::error::could not get $BUNDLE to the front"; shot 01-FAILED; [ -f ship/demo/walk-signin ] || [ -f ship/demo/walk-notify ] || exit 1; }
-
-shot 01-launched
-sleep 5
-
-# Did the first navigation fail? With no connection the shell shows its bundled offline page
-# ("needs a connection for your first open" + Retry) — the right thing for a user, the wrong thing
-# for a walk that then taps its way through a page with nothing on it (run #5, 2026-09-14). Web
-# content is invisible to idb's accessibility dump, so read the screen: 13 s after the tap the app
-# is on the hero (bright) or the feed; anything still this dark is the offline page or a stuck
-# splash. Say so loudly and press Retry ONCE, where the offline page puts it.
-# Luminance the way the recording is read: ffprobe's signalstats YAVG (limited range — pure black
-# is 16, the #0B0B0F ground ≈ 26, the bundled offline page ≈ 30, the film's held frames ≤ 35, the
-# hero ≥ 75). The first version used cv2 and printed 0 for everything.
-lum() {
-  ffprobe -v error -f lavfi -i "movie=$1,signalstats" -show_entries frame_tags=lavfi.signalstats.YAVG -of csv=p=0 2>/dev/null \
-    | head -1 | cut -d. -f1 | grep -E '^[0-9]+$' || echo 99
+launch_from_icon() {
+  if [ -n "$ICON" ]; then
+    ev "tap the Scroll Anytime icon at $ICON"
+    tapxy $ICON
+  else
+    ev "!! no icon found: simctl launch"
+    xcrun simctl launch "$U" "$BUNDLE" >/dev/null 2>&1 || true
+  fi
 }
-shot 01b-settled
-L=$(lum "$OUT/shots/01b-settled.png")
-echo "  screen luminance after launch: Y=$L (ground 26, offline page 30, hero 75+)"
-if [ "$L" -lt 40 ]; then
-  echo "::warning::the first launch is still dark ${L}/255 after 13 s — the offline fallback (no network?) or a stuck splash; tapping Retry"
-  idb ui tap --udid "$UDID" "$MID_X" "$(fy 0.618)"
+
+# ── one device ───────────────────────────────────────────────────────────────────────────────────────────────
+run_device() {  # $1 device name
+  local name="$1" dt slug
+  slug=$(echo "$name" | tr 'A-Z' 'a-z' | sed -e 's/[^a-z0-9]\{1,\}/-/g' -e 's/-$//')
+  DEV="$slug"
+  echo; echo "══ $name ($slug) ══ $(date -u +%T)Z"
+  dt=$(devtype "$name")
+  [ -n "$dt" ] || { echo "!! no device type named '$name' on this runner"; xcrun simctl list devicetypes | grep -i iphone; return 1; }
+  U=$(xcrun simctl create "audit $name" "$dt" "$RT") || { echo "!! could not create $name on $RT"; return 1; }
+  echo "created $U ($dt on $RT)"
+  xcrun simctl boot "$U" || return 1
+  xcrun simctl bootstatus "$U" -b >/dev/null 2>&1 || true
+  xcrun simctl install "$U" "$APP" || { echo "!! install failed"; return 1; }
+  pkill -f idb_companion >/dev/null 2>&1 || true; sleep 1
+  idb_companion --udid "$U" > "$CAP/idb-companion-$slug.log" 2>&1 &
+  local COMP=$!
+  sleep 5
+  idb connect localhost 10882 >/dev/null 2>&1 || true
+  idb list-targets 2>&1 | head -5
+  screen_points
+  case "$name" in *SE*) SAT=20 ;; *) SAT=59 ;; esac
+  # the network, off camera (a just-booted Simulator can sit without DNS), then Safari goes and first-boot settles
+  xcrun simctl openurl "$U" "https://scrollanytime.com/health" >/dev/null 2>&1 || true
+  sleep 8
+  xcrun simctl terminate "$U" com.apple.mobilesafari >/dev/null 2>&1 || true
   sleep 12
-  shot 01c-after-retry
-  echo "  luminance after Retry: $(lum "$OUT/shots/01c-after-retry.png")"
-fi
+  xcrun simctl spawn "$U" defaults read com.apple.UIKit 2>/dev/null | head -3 || true
+  ICON=""
+  ICON=$(find_icon) || ICON=""
+  echo "icon: ${ICON:-not found}"
 
-# A fresh install opens on the landing card, which is exactly what a reviewer sees. Take the
-# no-account path on camera: it is the app's own demonstration of "no account is required".
-CONTINUE_Y="${CONTINUE_Y:-$(fy 0.903)}"
-axdump 01-landing
+  # ── leg 1: the first open ──
+  EVENTS="$CAP/$slug-first-open-events.jsonl"; : > "$EVENTS"
+  ev "leg first-open on $name ($U), screen ${W}x${H}"
+  rec_start first-open
+  shot 00-home-screen
+  sleep 1.5
+  launch_from_icon
+  local t0; t0=$(date +%s)
+  # every half second for the first 6 s: the launch itself, lossless
+  local k; for k in 1 2 3 4 5 6 7 8 9 10; do sleep 0.25; shot "01-launch-$(printf %02d "$k")"; done
+  if wait_word "Continue with email" 45 >/dev/null; then ev "welcome on screen ($(( $(date +%s) - t0 )) s after the tap)"; else ev "!! no welcome within 45 s"; fi
+  shot 10-welcome
+  axdump 10-welcome
+  sleep 8                                  # held: whatever the welcome does on its own
+  shot 11-welcome-held
 
-# ── THE NOTIFY WALK (2026-10-14) ──────────────────────────────────────────────────────────────
-# With the marker file ship/demo/walk-notify present: the reminder ask end to end in this build
-# against the live site — the card, the iOS system prompt, Allow, a local notification, a push
-# (ship/demo/walk-notify.sh). Best effort: a failed step is a finding in crash/notify.txt.
-if [ -f ship/demo/walk-notify ]; then
-  set +e
-  . ship/demo/walk-signin.sh
-  . ship/demo/walk-notify.sh
-  shot "notify-00-welcome"; ocr "notify-00-welcome"
-  notify_walk
-  cat "$NOTE" 2>/dev/null
-  echo "notify walk finished"
-  exit 0
-fi
+  # Sign in with Apple — the system sheet (the Simulator has no Apple Account); dismissed
+  if tap_word "Sign in with Apple" 6; then
+    sleep 1.2; shot 20-apple-tap
+    sleep 2.5; shot 21-apple-sheet; axdump 21-apple-sheet
+    sleep 2
+    local w done=""
+    for w in "Cancel" "Close" "Not Now" "OK"; do
+      if at=$(find_word "$w"); then ev "dismiss the Apple sheet: '$w' at $at"; tapxy $at; done=1; break; fi
+    done
+    if [ -z "$done" ]; then
+      for w in "Cancel" "Close"; do
+        if c=$(python3 ship/demo/find-element.py "$w" < "$CAP/ax/$DEV-21-apple-sheet.json" 2>/dev/null); then ev "dismiss the Apple sheet by name '$w' at $c"; tapxy $c; done=1; break; fi
+      done
+    fi
+    [ -n "$done" ] || { ev "nothing to dismiss the Apple sheet with: swiped down"; idb ui swipe --udid "$U" $((W / 2)) $((H * 30 / 100)) $((W / 2)) $((H * 95 / 100)) --duration 0.3 || true; }
+    sleep 1.5; shot 22-apple-after
+    back_to_welcome 8 || { sleep 2; shot 23-apple-after-later; }
+  fi
 
-# ── THE SIGN-IN WALK (2026-10-10) ─────────────────────────────────────────────────────────────
-# With the marker file ship/demo/walk-signin present: what Continue with Google and Sign in with
-# Apple do in THIS build, then — when the tree carries ship/ios-before — in that shell too (the
-# 1.0.2 build, Google inside the web view). ship/demo/walk-signin.sh; nothing signs in. Best
-# effort from here: a step that fails is a finding to read in the shots, not a reason to stop.
-if [ -f ship/demo/walk-signin ]; then
-  set +e
-  . ship/demo/walk-signin.sh
-  signin_walk now
-  selftest_walk
-  # the device and state matrix runs on the CURRENT build, before the old shell replaces it
-  [ -f ship/demo/walk-matrix ] && matrix_walk
-  if install_before; then signin_walk before; else echo "  (no before shell in this tree)"; fi
-  cat "$OUT"/signin-*.txt 2>/dev/null
-  echo "sign-in walk finished"
-  exit 0
-fi
+  # Continue with Google — the consent alert, Google's first page, cancelled
+  if tap_word "Continue with Google" 8; then
+    sleep 1.2; shot 30-google-tap
+    sleep 1.5; shot 31-google-alert
+    if find_word "wants to use" >/dev/null; then
+      sleep 1.5
+      local box
+      if box=$(line_box "Continue"); then
+        read -r x0 y0 x1 y1 <<<"$box"; ev "the consent alert: Continue at $(((x0 + x1) / 2)) $(((y0 + y1) / 2))"; tapxy $(((x0 + x1) / 2)) $(((y0 + y1) / 2))
+      else ev "!! the alert's Continue not found"; fi
+      sleep 2; shot 32-google-sheet-opening
+      sleep 4; shot 33-google-page
+      sleep 3; shot 34-google-page-later; axdump 34-google-page
+    else
+      ev "no consent alert after the Google tap"
+      sleep 4; shot 33-google-page
+    fi
+    local tries=0
+    while ! on_welcome && [ $tries -lt 4 ]; do
+      tries=$((tries + 1))
+      if box=$(line_box "Cancel"); then
+        read -r x0 y0 x1 y1 <<<"$box"; ev "Google sheet: Cancel at $(((x0 + x1) / 2)) $(((y0 + y1) / 2))"; tapxy $(((x0 + x1) / 2)) $(((y0 + y1) / 2))
+      elif c=$(idb ui describe-all --udid "$U" 2>/dev/null | python3 ship/demo/find-element.py "Close" 2>/dev/null) || \
+           c=$(idb ui describe-all --udid "$U" 2>/dev/null | python3 ship/demo/find-element.py "Cancel" 2>/dev/null); then
+        ev "Google sheet: closed by name at $c"; tapxy $c
+      elif [ $tries -le 2 ]; then
+        # iOS 26's sheet closes with an X at its top-left (walk-signin.sh, run 38107613573)
+        ev "Google sheet: the X at the top-left"; tapxy "$(python3 -c "print(int(0.097 * $W))")" "$(python3 -c "print(int((0.1125 if $H > 700 else 0.075) * $H))")"
+      else
+        ev "Google sheet: swiped down"; idb ui swipe --udid "$U" $((W / 2)) $((H * 12 / 100)) $((W / 2)) $((H * 95 / 100)) --duration 0.3 || true
+      fi
+      sleep 2.5
+    done
+    shot 35-google-after
+    back_to_welcome 6 || true
+    sleep 2; shot 36-google-after-later
+  fi
 
-# ── THE VERSION ROW ONLY (STEP 1, 2026-09-28) ─────────────────────────────────────────────────
-# With the marker file ship/demo/walk-version-only present, the walk is just: enter without an
-# account, open Profile, scroll to its last row, shoot it, read it from the accessibility tree
-# beside GET /version. The full walk's many steps drifted (the first run's "profile" tap landed
-# on an account sheet); this one cannot. The workflow's inputs need no change for it.
-if [ -f ship/demo/walk-version-only ]; then
-  # A fresh install opens on the welcome card, which needs a sign-in to go further (an email code
-  # this public runner must never hold), so the stamp is read where it needs no account: the
-  # welcome card's own footer carries the same "Version 1.1.0 · <hash> · <time>" line as the
-  # Profile's Version row and the console (app/src/onboarding/Onboarding.tsx).
-  sleep 3
-  shot 02-welcome-version-stamp
-  axdump 02-welcome
-  python3 - "$AX/02-welcome.json" <<'PY' || true
-import re, sys
-raw = open(sys.argv[1], encoding='utf-8', errors='replace').read()
-m = re.findall(r'Version \d+\.\d+\.\d+[^"\\]{0,80}', raw)
-print('  Build stamp on the Simulator (welcome card):', m[0] if m else 'NOT FOUND in the accessibility dump (see the screenshot)')
-PY
-  curl -s https://scrollanytime.com/version | python3 -c "import json,sys; v=json.load(sys.stdin); print('  GET /version on the worker:', v['sha'][:7], v['built_at'])" || true
-  echo "version-row walk finished"
-  exit 0
-fi
-# The previous run tapped this a second too early and then spent the whole walk on the
-# landing card. Wait for the control to exist rather than for a stopwatch.
-if ! tap_named "continue without an account" --contains; then
-  echo "  falling back to the measured coordinate"
-  idb ui tap --udid "$UDID" "$MID_X" "$CONTINUE_Y"
-fi
-sleep 6
-shot 02-entered
-axdump 02-feed
-sleep 5
-shot 03-feed
+  # Terms, then back; Privacy Policy, then back
+  if tap_word "Terms" 6; then
+    sleep 1; shot 40-terms; sleep 2; shot 41-terms-settled
+    legal_back "Terms of Use"; sleep 1.2; shot 42-terms-back
+    back_to_welcome 6 || true
+  fi
+  sleep 1.5
+  if tap_word "Privacy Policy" 6; then
+    sleep 1; shot 43-privacy; sleep 2; shot 44-privacy-settled
+    legal_back "Privacy Policy"; sleep 1.2; shot 45-privacy-back
+    back_to_welcome 6 || true
+  fi
+  sleep 2
 
-# One tap turns the sound on. It also pauses, because that is what a tap on a video does here,
-# so tap again to resume -- the previous run left the clip frozen behind a play triangle for the
-# rest of the walk.
-tap "$MID_X" "$MID_Y" 2.0
-shot 04-sound-on
-tap "$MID_X" "$MID_Y" 2.5
-shot 04b-playing
+  # Continue with email — the email step; nothing typed
+  if tap_word "Continue with email" 6; then
+    sleep 0.6; shot 50-email-tap
+    sleep 1.4; shot 51-email-step
+    sleep 2.5; shot 52-email-keyboard
+    sleep 3; shot 53-email-held
+  fi
+  rec_stop first-open
 
-for i in 1 2 3; do
-  swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 4)) 0.16 3.5
-  shot "05-swipe-$i"
+  # ── leg 2: the relaunch (the same install, quit and opened again) ──
+  EVENTS="$CAP/$slug-relaunch-events.jsonl"; : > "$EVENTS"
+  ev "leg relaunch on $name"
+  xcrun simctl terminate "$U" "$BUNDLE" >/dev/null 2>&1 || true
+  ev "app terminated"
+  sleep 2
+  ICON=$(find_icon) || ICON=""
+  rec_start relaunch
+  shot 60-home-screen-again
+  sleep 1.5
+  launch_from_icon
+  for k in 1 2 3 4 5 6 7 8; do sleep 0.25; shot "61-relaunch-$(printf %02d "$k")"; done
+  local seen=""
+  for k in $(seq 1 60); do
+    if find_word "Continue with email" >/dev/null; then seen=welcome; break; fi
+    if find_word "Email me a sign-in link" >/dev/null; then seen=email-step; break; fi
+    sleep 0.4
+  done
+  ev "relaunch landed on: ${seen:-neither the welcome nor the email step}"
+  shot 70-relaunch-landed
+  sleep 6; shot 71-relaunch-held
+  rec_stop relaunch
+
+  kill "$COMP" >/dev/null 2>&1 || true
+  xcrun simctl shutdown "$U" >/dev/null 2>&1 || true
+  echo "══ $name done ══ $(( $(date +%s) - T_START )) s into the walk"
+}
+
+IFS='|' read -r -a DEVS <<<"$DEVICES_LIST"
+for d in "${DEVS[@]}"; do
+  el=$(( $(date +%s) - T_START ))
+  if [ $el -gt $((BUDGET_S - 480)) ]; then echo "!! $d NOT RUN: ${el}s of ${BUDGET_S}s used"; continue; fi
+  run_device "$d" || echo "!! $d failed (see above)"
 done
-swipe "$MID_X" $((H / 4)) "$MID_X" $((H * 3 / 4)) 0.16 3.5
-shot 06-swipe-back
 
-# Save with the rail button, not a double-tap. Two `idb ui tap` invocations cannot land inside the
-# double-tap window -- each one costs its own process start -- so the previous run's "save" was read
-# as two ordinary taps and My Torah came up empty.
-SAVE_Y=$(fy 0.642)
-tap_named "save" || tap "$RAIL_X" "$SAVE_Y" 0.1
-sleep 3
-shot 07-saved
-
-# SHARING (2026-09-15): the rail's WhatsApp, Download and More. A simulator has no WhatsApp, so the
-# shell's fallback is what gets recorded: the tap leaves for wa.me in Safari. Then back into the
-# app for the one-time download card, the ring (the clip's watermarked file is usually still
-# rendering on the day of the walk: "Preparing"), and the More sheet.
-axdump 07b-rail
-tap_named "whatsapp" --contains || tap "$RAIL_X" "$(fy 0.70)" 0.1
-sleep 4
-shot 07b-whatsapp
-xcrun simctl terminate "$UDID" com.apple.mobilesafari >/dev/null 2>&1 || true
-xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-sleep 6
-# Download is the FIRST row of the More sheet (owner: nothing on the screen but Save · WhatsApp · More)
-tap_named "more options" --contains || tap "$RAIL_X" "$(fy 0.84)" 0.1
-sleep 2.5
-shot 07c-more
-axdump 07c-more
-tap_named "download" --contains || tap "$MID_X" "$(fy 0.45)" 0.1
-sleep 2
-shot 07d-download-card
-tap_named "got it" --contains || tap "$MID_X" "$(fy 0.58)" 0.1
-sleep 3
-shot 07e-download-ring
-tap "$MID_X" "$(fy 0.10)" 1.5
-
-tap_named "my torah" --contains || tap "$TORAH_X" "$NAVY" 0.1
-sleep 4
-shot 08-my-torah
-tap_named "rabbis" || tap "$RABBIS_X" "$NAVY" 0.1
-sleep 4
-shot 09-rabbis
-axdump 09-rabbis
-
-RABBI_X=$(fx 0.26); FOLLOW_Y=$(fy 0.61); CARD_Y=$(fy 0.43)
-tap "$RABBI_X" "$FOLLOW_Y" 3.0
-shot 10-followed
-# Following offers an account, which is worth showing and then declining: the app keeps working.
-tap "$MID_X" $(fy 0.10) 2.5
-shot 10b-declined
-tap "$RABBI_X" "$CARD_Y" 4.0
-shot 11-rabbi-open
-
-tap_named "profile" || tap "$PROFILE_X" "$NAVY" 0.1
-sleep 4
-shot 12-profile
-axdump 12-profile
-# Scroll Profile so the next pass knows where Delete account sits -- Apple asked to see it.
-swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 4)) 0.30 2.5
-shot 13-profile-scrolled
-swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 4)) 0.30 2.5
-shot 14-profile-bottom
-
-# ── THE BUILD STAMP (STEP 1, 2026-09-28) ──────────────────────────────────────────────────────
-# The Version row is the last row of Profile: "Version 1.1.0 · <git short hash> · <build time>",
-# the same line the page logs to the console on boot, and the hash must be what GET /version on
-# the worker reports. This is the real shell binary on real iOS (the Simulator), so the row read
-# off this screen is the row a phone shows — the closest thing to a device screenshot this
-# pipeline can produce, and it is described as a Simulator capture, never as a device one.
-for i in 1 2 3 4; do
-  swipe "$MID_X" $((H * 3 / 4)) "$MID_X" $((H / 5)) 0.30 1.4
+# ── the recordings: every frame kept at its own display time ─────────────────────────────────────────────────
+if [ -n "$BREW_PID" ]; then wait "$BREW_PID" 2>/dev/null || true; tail -3 "$CAP/brew-ffmpeg.log"; fi
+FFMPEG="$(command -v ffmpeg || true)"
+echo; echo "ffmpeg: ${FFMPEG:-none}"
+for item in ${RAWS[@]+"${RAWS[@]}"}; do
+  raw="${item%%|*}"; name="${item##*|}"
+  [ -s "$raw" ] || { echo "!! $name: no recording"; continue; }
+  size=$(stat -f %z "$raw")
+  if [ -n "$FFMPEG" ]; then
+    # a remux to Matroska keeps display time (the Simulator mp4's decoded stamps are DTS-based after a seek)
+    ffmpeg -v error -y -i "$raw" -c copy "$OUT/.tmp-$name.mkv" && \
+    ffmpeg -v error -y -i "$OUT/.tmp-$name.mkv" -map 0:v:0 -c:v libx264 -preset veryfast -crf 14 -pix_fmt yuv420p -fps_mode passthrough "$CAP/$name.mp4" && \
+      echo "$name: $(du -h "$CAP/$name.mp4" | cut -f1) encoded (raw $((size / 1048576)) MB)"
+    [ "$size" -lt 262144000 ] && cp "$OUT/.tmp-$name.mkv" "$CAP/$name-raw.mkv"
+  else
+    cp "$raw" "$CAP/$name-raw.mp4"; echo "$name: raw kept ($((size / 1048576)) MB)"
+  fi
 done
-sleep 2
-shot 15-profile-version-row
-axdump 15-profile-version-row
-python3 - "$AX/15-profile-version-row.json" <<'PY' || true
-import re, sys
-raw = open(sys.argv[1], encoding='utf-8', errors='replace').read()
-m = re.findall(r'Version \d+\.\d+\.\d+[^"\\]{0,80}', raw)
-print('  Version row on the Simulator:', m[0] if m else 'NOT FOUND in the accessibility dump (see the screenshot)')
-PY
-curl -s https://scrollanytime.com/version | python3 -c "import json,sys; v=json.load(sys.stdin); print('  GET /version on the worker:', v['sha'][:7], v['built_at'])" || true
-echo "walk finished"
-
-# ── the returning launch ───────────────────────────────────────────────────────────────────────
-# The first launch above is the full film; every launch after it is the 1.5 s cut. Record that too:
-# quit the app, wait a beat, open it again from the icon (or directly), and shoot it landing.
-echo "  - returning launch"
-xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-sleep 2
-shot 20-quit
-xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-sleep 0.6; shot 21-returning-0600ms
-sleep 0.6; shot 22-returning-1200ms
-sleep 0.8; shot 23-returning-2000ms
-sleep 1.5; shot 24-returning-landed
-
-
-# ── Continue with Google ───────────────────────────────────────────────────────────────────────
-# The one sign-in that navigates the web view off our origin. With app-bound domains it FAILED
-# silently in every build before 27 (the navigation to accounts.google.com was refused and the
-# shell showed its "no connection" glyph). Prove the page is reached: tap the button on the hero,
-# wait, and read the screen — Google's sign-in page is white (Y > 150); ours never is.
-echo "  - continue with Google"
-xcrun simctl terminate "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-sleep 2
-xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null 2>&1 || true
-sleep 12
-shot 30-hero-again
-idb ui tap --udid "$UDID" "$MID_X" "$(fy 0.796)"
-sleep 8
-shot 31-google
-G=$(lum "$OUT/shots/31-google.png")
-echo "  luminance after Continue with Google: Y=$G (Google's page is white, > 150)"
-if [ "$G" -gt 150 ]; then echo "  Google sign-in page reached inside the app"; else echo "::warning::Continue with Google did not reach Google's page (Y=$G) — see 31-google.png"; fi
-axdump 31-google
+# every lossless shot's words, now that nothing is being measured
+for f in "$CAP"/shots/*.png; do [ -f "$f" ] && "$OCRW" "$f" > "$CAP/ocr/$(basename "$f" .png).json" 2>/dev/null; done
+echo "ocr: $(ls "$CAP"/ocr/*.json 2>/dev/null | wc -l | tr -d ' ') shots read"
+ls -la "$CAP" | head -60
+echo "── the audit walk finished in $(( $(date +%s) - T_START )) s ──"
+exit 0
