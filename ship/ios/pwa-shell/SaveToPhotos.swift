@@ -2,6 +2,7 @@ import UIKit
 import WebKit
 import Photos
 import AVFoundation
+import Network
 
 /// SAVE TO PHOTOS (the owner's spec of 2026-10-14) — the web app's `saveToPhotos` message handler.
 /// app/src/lib/nativeSave.ts is the other side of this contract:
@@ -281,13 +282,13 @@ enum UITestHooks {
 
     /// the clip the test opens on: https, our origin, nothing else
     static var startURL: URL? {
-        guard on, let raw = value("-saStartURL"), let url = URL(string: raw), SaveToPhotos.isOurs(url) else { return nil }
+        guard on || gate, let raw = value("-saStartURL"), let url = URL(string: raw), SaveToPhotos.isOurs(url) else { return nil }
         return url
     }
 
     /// the page's storage before its first script, as the suites set it (scripts/perf/perf.mjs)
     static func documentStartScript() -> String? {
-        guard on else { return nil }
+        guard on else { return gateScript() }
         var setup: [String: String] = ["zerem.suite": "1"]
         for k in ["zerem.onboarded", "zerem.landing.seen", "zerem.card.rabbis", "zerem.ask.account", "zerem.ask.goal", "zerem.ask.notify", "zerem.coach.swipe", "zerem.coach.doubletap", "zerem.coach.speed", "zerem.intro.done", "zerem.dlcard.seen"] {
             setup[k] = "1"
@@ -339,7 +340,7 @@ enum UITestHooks {
 
     /// the page put "Saved to Photos" on screen: count it on a native label the test reads
     static func saw(_ text: String) {
-        guard on else { return }
+        guard on || gate else { return }
         DispatchQueue.main.async {
             sawCount += 1
             marker("sa-uitest-saw", "SA-UITEST saw \(text) \(sawCount)")
@@ -350,7 +351,7 @@ enum UITestHooks {
     /// THE SESSION'S KEYCHAIN COPY, AS THE TEST SEES IT (2026-10-22, SessionPersistUITests): the person the page
     /// last saved through the `session` bridge — "none" after a clear. It names the user id, nothing else.
     static func sessionSaved(_ json: String?) {
-        guard on else { return }
+        guard on || gate else { return }
         var who = "none"
         if let json, let data = json.data(using: .utf8),
            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -368,7 +369,7 @@ enum UITestHooks {
     /// localStorage, IndexedDB, caches and every cookie — as an evicted store would. True when the wipe started
     /// (the caller loads in `then`, once it is done); false otherwise, and nothing happens.
     static func wipeWebDataOnce(_ then: @escaping () -> Void) -> Bool {
-        guard on, ProcessInfo.processInfo.arguments.contains("-saUITestWipeWebData"), !wiped else { return false }
+        guard on || gate, ProcessInfo.processInfo.arguments.contains("-saUITestWipeWebData"), !wiped else { return false }
         wiped = true
         WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
             DispatchQueue.main.async {
@@ -380,5 +381,161 @@ enum UITestHooks {
             }
         }
         return true
+    }
+}
+
+// MARK: THE RELEASE GATE'S WALK (the owner, 2026-11-02: "NOTHING DEPLOYS WITHOUT PASSING IT")
+
+/// `-saGate`: the release gate's walk (ship/ios/pwa-shellUITests/GateWalkUITests.swift, run by ship/ios/gate-walk.sh).
+/// Unlike -saUITest it sets NO storage flag and mints nobody — the page runs the REAL first-run path, the
+/// onboarding and the three tips included — and it only WATCHES: a script at document start reports what the
+/// page put on screen (the phrases the test names in -saGateWatch), every [load] line (current → first moving
+/// frame, per clip), the route and the navigation stack, page errors and each new document; the shell adds its
+/// own moments (the launch, its offline page, "Still connecting…", a dead content process). Everything lands in
+/// a folder on the HOST (-saGateDir, default /tmp/sa-gate — a Simulator app writes host paths): events.jsonl,
+/// every event with the shell's clock, and state.json, what the test polls instead of slow accessibility queries.
+/// The user-agent says " SAUITest SAGate" (worker/src/domain/ops.ts files it under Test suite).
+extension UITestHooks {
+    static var gate: Bool { ProcessInfo.processInfo.arguments.contains("-saGate") }
+
+    private static let gateQueue = DispatchQueue(label: "com.scrollanytime.gate")
+    private static var gateState: [String: Any] = ["seen": [String: Double](), "loads": 0, "docs": 0, "errors": 0, "wall": 0, "died": 0, "playing": 0]
+
+    private static var gateDir: URL? {
+        guard gate else { return nil }
+        let url = URL(fileURLWithPath: value("-saGateDir") ?? "/tmp/sa-gate", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    /// THE PIN REACHES THE PAGE (2026-11-04). The Simulator's WebKit does not take the Mac's system proxy for its own
+    /// requests: in the 11-03 walk all 1,802 of the app's web connections were HTTP/3 straight to Cloudflare and none
+    /// went to the proxy, so the page and its API ran on the LIVE build while curl's check through the proxy said
+    /// "pinned". `-saGateProxy host:port` sends everything this data store loads through that proxy (HTTP CONNECT: TCP).
+    static func gateProxy(_ store: WKWebsiteDataStore) {
+        guard gate, let hp = value("-saGateProxy"), let i = hp.lastIndex(of: ":"),
+              let n = UInt16(hp[hp.index(after: i)...]), let port = NWEndpoint.Port(rawValue: n) else { return }
+        let to = NWEndpoint.hostPort(host: NWEndpoint.Host(String(hp[..<i])), port: port)
+        store.proxyConfigurations = [ProxyConfiguration(httpCONNECTProxy: to, tlsOptions: nil)]
+        gateNote("proxy", ["to": hp])
+    }
+
+    /// the shell's own moment, for the record (no-op without -saGate)
+    static func gateNote(_ kind: String, _ extra: [String: Any] = [:]) {
+        guard gate else { return }
+        var e = extra
+        e["ev"] = kind
+        record(e)
+    }
+
+    /// what the page's watcher posted ("gate:<json>")
+    static func gateEvent(_ json: String) {
+        guard gate, let data = json.data(using: .utf8), let e = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+        record(e)
+    }
+
+    private static func record(_ event: [String: Any]) {
+        let t = (Date().timeIntervalSince1970 * 1000).rounded()
+        gateQueue.async {
+            guard let dir = gateDir else { return }
+            var e = event
+            e["t"] = t
+            let count = { (k: String) in gateState[k] = (gateState[k] as? Int ?? 0) + 1 }
+            switch e["ev"] as? String ?? "" {
+            case "saw":
+                if let k = e["k"] as? String {
+                    var seen = gateState["seen"] as? [String: Double] ?? [:]
+                    if seen[k] == nil { seen[k] = t }
+                    gateState["seen"] = seen
+                }
+            case "load":
+                count("loads")
+                gateState["lastLoad"] = e["line"]
+                if let l = e["line"] as? String, !l.contains(" left "), gateState["firstLoadAt"] == nil { gateState["firstLoadAt"] = t }
+            case "route": gateState["route"] = e["r"]; gateState["nav"] = e["nav"]
+            case "playing":
+                gateState["playing"] = e["on"]
+                if (e["on"] as? Int) == 1, gateState["firstPlayingAt"] == nil { gateState["firstPlayingAt"] = t }
+            case "streak": gateState["streak"] = e["text"]
+            case "doc": count("docs"); gateState["href"] = e["href"]
+            case "build": gateState["build"] = e["sha"]
+            case "error": count("errors")
+            case "wall-shell", "wall-web": gateState["wall"] = 1
+            case "webcontent-died": count("died")
+            case "launch": gateState["launchAt"] = t
+            // THE GHOST, timed by the watcher (2026-11-07): each clip start's ms to the rail under 40 %, each touch's to above 95 %
+            case "ghostplay", "ghosttouch":
+                let k = (e["ev"] as? String) == "ghostplay" ? "ghostPlays" : "ghostTouches"
+                var list = gateState[k] as? [[String: Any]] ?? []
+                if list.count < 60 { list.append(e) }
+                gateState[k] = list
+            case "ghostprobe": gateState["ghostProbe"] = e
+            // THE SHABBAT LOCK: the app's own state as it changes, and the simulator test's thirty results
+            case "lock": gateState["lock"] = e
+            case "lockcases": gateState["lockCases"] = e["results"]
+            default: break
+            }
+            gateState["t"] = t
+            if let line = try? JSONSerialization.data(withJSONObject: e, options: [.sortedKeys]) {
+                let file = dir.appendingPathComponent("events.jsonl")
+                if !FileManager.default.fileExists(atPath: file.path) { FileManager.default.createFile(atPath: file.path, contents: nil) }
+                if let h = try? FileHandle(forWritingTo: file) {
+                    h.seekToEndOfFile()
+                    h.write(line)
+                    h.write("\n".data(using: .utf8)!)
+                    try? h.close()
+                }
+            }
+            if let state = try? JSONSerialization.data(withJSONObject: gateState, options: [.sortedKeys]) {
+                try? state.write(to: dir.appendingPathComponent("state.json"), options: .atomic)
+            }
+        }
+    }
+
+    /// the watcher: posts on change only, and never touches the page's own state
+    static func gateScript() -> String? {
+        guard gate else { return nil }
+        // [[key, phrase], …] from the test: the words whose first appearance it waits for
+        let watch = value("-saGateWatch") ?? "[]"
+        // the ghost probe (testSignedInTour): three clip starts with no touch, timed from outside the app's code
+        let ghostProbe = ProcessInfo.processInfo.arguments.contains("-saGateGhostProbe") ? "1" : "0"
+        return """
+        (function(){if(window.__saGate)return;window.__saGate=1;
+        var W=\(watch);var seen={};
+        function post(o){try{window.webkit.messageHandlers.sa.postMessage('gate:'+JSON.stringify(o))}catch(e){}}
+        post({ev:'doc',href:location.href,at:Date.now()});
+        fetch('/version',{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){post({ev:'build',sha:String(j.sha||''),at:Date.now()})}).catch(function(e){post({ev:'build',sha:'',err:String(e&&e.message||e).slice(0,120),at:Date.now()})});
+        function look(n){var t=n&&n.textContent;if(!t)return;for(var i=0;i<W.length;i++){var k=W[i][0];var x=seen[k]?-1:t.indexOf(W[i][1]);if(x!==-1){seen[k]=1;post({ev:'saw',k:k,text:t.slice(x,x+90),at:Date.now()})}}}
+        new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var m=ms[i];if(m.type==='characterData'){look(m.target);continue}for(var j=0;j<m.addedNodes.length;j++)look(m.addedNodes[j])}}).observe(document,{childList:true,subtree:true,characterData:true});
+        var L=window.__saLoad=window.__saLoad||[];var push=L.push;L.push=function(l){post({ev:'load',line:String(l),at:Date.now()});return push.apply(this,arguments)};
+        window.addEventListener('error',function(e){post({ev:'error',msg:String(e.message||'').slice(0,200),at:Date.now()})});
+        window.addEventListener('unhandledrejection',function(e){post({ev:'error',msg:('rejection '+String(e.reason&&e.reason.message||e.reason||'')).slice(0,200),at:Date.now()})});
+        var r0='',p0=-1,s0='',d0=0;
+        setInterval(function(){try{var n=Date.now();if(n-d0<5000)return;d0=n;
+          post({ev:'dom',nodes:document.getElementsByTagName('*').length,videos:document.getElementsByTagName('video').length,srcs:[].filter.call(document.getElementsByTagName('video'),function(v){return !!(v.currentSrc||v.src)}).length,imgs:document.images.length,canvases:document.getElementsByTagName('canvas').length,at:n})}catch(e){}},1000);
+        setInterval(function(){try{
+          var r=location.pathname+location.search,nav='';try{nav=window.__saNav?JSON.stringify(window.__saNav()):''}catch(e){}
+          if(r+nav!==r0){r0=r+nav;post({ev:'route',r:r,nav:nav,at:Date.now()})}
+          var vs=document.getElementsByTagName('video'),p=0;for(var i=0;i<vs.length;i++){var v=vs[i];if(!v.paused&&v.readyState>=3&&v.currentTime>0.05)p=1}
+          if(p!==p0){p0=p;post({ev:'playing',on:p,at:Date.now()})}
+          var sp=document.querySelector('[data-gate-streak],.streak-pill,[class*=StreakPill],[aria-label*=streak i]');var s=sp?(sp.getAttribute('aria-label')||sp.textContent||'').trim():'';
+          if(s!==s0){s0=s;post({ev:'streak',text:s,at:Date.now()})}
+          var lk=window.__saLock;if(lk){var ls=(lk.locked?1:0)+':'+(lk.checkedAt||0)+':'+(lk.answer&&lk.answer.killed?1:0);if(ls!==k0){k0=ls;post({ev:'lock',locked:lk.locked?1:0,checked:lk.checkedAt||0,reason:lk.reason||'',exempt:lk.answer&&lk.answer.exempt?1:0,place:lk.answer&&lk.answer.place?lk.answer.place.slug:null,at:Date.now()})}}
+          var lc=window.__saLockCases;if(lc&&lc.done&&!lcSent){lcSent=1;post({ev:'lockcases',results:lc.results,at:Date.now()})}
+        }catch(e){}},400);
+        var k0='',lcSent=0;
+        var GP=\(ghostProbe);
+        function eff(el){var o=1;for(var n=el;n&&n.nodeType===1;n=n.parentElement){var v=parseFloat(getComputedStyle(n).opacity);if(!isNaN(v))o*=v}return o}
+        function railNow(){var bs=document.querySelectorAll('.feed-root .rail-save');var mid=innerHeight/2;for(var i=0;i<bs.length;i++){var r=bs[i].closest('.ui')||bs[i];var q=r.getBoundingClientRect();if(q.top<=mid&&q.bottom>=mid&&q.width>0)return bs[i]}return null}
+        function until(ok,max,cb){var t0=performance.now();(function f(){var b=railNow();var o=b?eff(b):-1;if(b&&ok(o)){cb(Math.round(performance.now()-t0),o);return}if(performance.now()-t0>max){cb(-1,o);return}requestAnimationFrame(f)})()}
+        var plays=0,lastV=null,lastT=0;
+        document.addEventListener('playing',function(e){try{var v=e.target;if(!v||v.tagName!=='VIDEO')return;var q=v.getBoundingClientRect();var mid=innerHeight/2;if(!(q.top<=mid&&q.bottom>=mid))return;var now=performance.now();if(v===lastV&&now-lastT<3000)return;lastV=v;lastT=now;var b=railNow();var o0=b?eff(b):-1;var g=window.__saGhost;var held=g?(g.blocked||'')+(g.touchHeld?' touch':'')+(g.shellVoiceOver?' vo':'')+(g.assistive?' as':''):'';plays++;var n=plays;
+          until(function(o){return o<0.4},1500,function(ms,o){post({ev:'ghostplay',n:n,ms:ms,o0:Math.round(o0*100)/100,o:Math.round(o*100)/100,held:held,at:Date.now()})})}catch(x){}},true);
+        window.addEventListener('pointerdown',function(){try{var b=railNow();if(!b)return;var o0=eff(b);if(o0>=0.4)return;until(function(o){return o>0.95},1000,function(ms,o){post({ev:'ghosttouch',ms:ms,o0:Math.round(o0*100)/100,o:Math.round(o*100)/100,at:Date.now()})})}catch(x){}},true);
+        if(GP===1){var gpStarted=0;var gpTimer=setInterval(function(){try{if(gpStarted||plays<1||!window.__saGateAdvance||!railNow())return;gpStarted=1;clearInterval(gpTimer);
+          var step=0;function next(){step++;if(step>3){setTimeout(function(){post({ev:'ghostprobe',done:1,plays:plays,at:Date.now()})},2500);return}var before=plays;window.__saGateAdvance();var w=0;var iv=setInterval(function(){w++;if(plays>before||w>40){clearInterval(iv);setTimeout(next,2500)}},250)}
+          setTimeout(next,2500)}catch(x){}},500)}
+        })();
+        """
     }
 }
