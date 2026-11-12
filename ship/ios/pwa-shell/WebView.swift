@@ -84,6 +84,8 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // them — and localStorage live on disk and survive every relaunch. A non-persistent store would forget
     // the person at each launch; this has always been the default, and it is now written down.
     config.websiteDataStore = WKWebsiteDataStore.default()
+    // the release gate's walk only (-saGate -saGateProxy): every request through the proxy that pins the build
+    UITestHooks.gateProxy(config.websiteDataStore)
 
     config.limitsNavigationsToAppBoundDomains = true;
     config.allowsInlineMediaPlayback = true
@@ -133,6 +135,8 @@ func createWebView(container: UIView, WKSMH: WKScriptMessageHandler, WKND: WKNav
     // under its XCUITest the shell says so, or Ops would count the test's guest as a person
     // (worker/src/domain/ops.ts SUITE_UAS)
     if UITestHooks.on { webView.customUserAgent = (webView.customUserAgent ?? "") + " SAUITest" }
+    // …and under the release gate's walk (-saGate), which runs the REAL first-run path: a test all the same
+    if UITestHooks.gate { webView.customUserAgent = (webView.customUserAgent ?? "") + " SAUITest SAGate" }
     // AND IN THE SIMULATOR IT ALWAYS SAYS SO (2026-10-26). The demo and sign-in walks run the shell
     // there on GitHub's runners WITHOUT -saUITest, and 14 of launch week's "people's" crashes were
     // theirs — an iPhone18,5 Simulator on a "1.1.3 (1)" build, its guest counted as a person by Ops,
