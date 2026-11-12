@@ -1,0 +1,64 @@
+Scroll Anytime is an endless feed of short Torah video lessons (vertical, swipe-up format) from
+rabbis and Torah organizations. It is a content/education app: watch, save, follow rabbis, set a
+daily learning goal, and track a learning streak.
+
+WORKS WITHOUT AN ACCOUNT
+The entire app is usable with no sign-in: launch it and the feed plays immediately. Sign-in is
+optional and exists solely so saves, follows and streaks survive a new device.
+
+Sign-in by email one-time code (no password) is always available, and is what the review account
+below uses. Sign in with Apple is listed FIRST wherever a provider button appears. A provider whose
+credentials are not configured is NOT SHOWN AT ALL in this build — there is no button in the app
+that reports an unavailable feature.
+
+Account deletion is available in-app: Profile → Delete account (two confirmations, permanently
+removes all user data across every table, effective immediately).
+
+REVIEW ACCOUNT
+- Email: review@scrollanytime.com
+- One-time code: enter the review code (the worker secret REVIEW_CODE — also in worker/.dev.vars locally; never in the repo) when the app asks for the emailed code (this fixed code works only
+  for this review address; no email is actually sent to it).
+- The account is pre-populated with a few followed rabbis and saved clips so you can see a lived-in
+  My Torah tab and a personalized feed.
+
+CONTENT RIGHTS
+The app publishes short excerpts of Torah lectures. Permission was given to us directly and in
+person by the rabbis who teach them; it was given VERBALLY, so there are no signed licence
+documents and this file must never claim otherwise. Lessons come from the rabbis' own public social
+accounts and from iTorah. Every clip is attributed on-screen, Profile > About & Credits names every
+contributor with a contact address, and any lesson is removed immediately on request from the
+teacher, their family or their publisher. Nothing in the app is monetized.
+
+LOCATION
+The app contains no location code of any kind and never requests location permission.
+
+PURCHASES
+There are no purchases, subscriptions, or external purchase links in this version. (A "Sponsor"
+page exists on the website only; it is not present in the app.)
+
+PUSH NOTIFICATIONS
+The app asks for notification permission ONCE, and only after the person has watched enough
+for a day to count — never on first open, never among the first tips. The ask is a card at the end
+of that clip: "Want a reminder tomorrow?" with "Remind me at 8:00 PM" and "Not now". Only the
+gold button raises the system prompt. "Not now" is offered at most once more, seven days later,
+and then never again.
+
+Reminders themselves are LOCAL notifications the app schedules on the device: one a day at the
+time the person picks, suppressed during quiet hours and never on Shabbat or Yom Tov. Remote
+pushes (a milestone, the weekly recap) are sent from our own server through APNs; there is no
+third-party push or marketing SDK. Everything can be turned off in Profile → Reminders, and if
+permission was denied the app links straight to Settings instead of asking again.
+
+OFFLINE
+The app works offline: saved clips are listed and recently watched clips play with no connection
+(try airplane mode after watching a few clips). On a FIRST launch with no connection the app shows
+a branded offline screen with a Retry button — never a blank page.
+
+CAPTIONS
+Clips that have word-level captions show them on the CC control, with the current word highlighted,
+and offer a full readable transcript. Caption coverage is partial today and growing as the library
+is processed, so some clips have no CC control. The store description says exactly this.
+
+CONTACT
+- Email: hello@scrollanytime.com
+- The owner's phone number is in the App Review Information contact fields of this submission.
