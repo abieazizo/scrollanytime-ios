@@ -70,6 +70,26 @@ if [ -f ship/demo/walk-session ]; then
   exit $code
 fi
 
+# THE RELEASE GATE'S WALK, on a mirror branch (the owner, 2026-11-02): with the marker ship/demo/walk-gate present
+# (scripts/gate/run.mjs writes it: the run, the Worker version to pin, its commit, the run's gate address and code),
+# the walk is ship/ios/gate-walk.sh — the real shell, a cleared install, throttled 4G, every request pinned to that
+# version — and nothing else. Its checks, events, memory and log go under crash/, its screenshots under shots/.
+if [ -f ship/demo/walk-gate ]; then
+  code=0
+  OUT="$OUT" UDID="$UDID" bash ship/ios/gate-walk.sh || code=$?
+  exit $code
+fi
+
+# THE FIRST OPEN, MEASURED, on a mirror branch (incident 2026-11-02): with the marker ship/demo/walk-firstopen
+# present, the walk is ship/demo/walk-firstopen.sh — fresh install → the feed's first frame (A) and the welcome (B)
+# on the lte profile, and the network blocked around launch (C) — each launch on an erased Simulator, and nothing
+# else. The marker's `legs:` line picks the legs. Its log and summary go under crash/ (uploaded whatever they hold).
+if [ -f ship/demo/walk-firstopen ]; then
+  code=0
+  OUT="$OUT" UDID="$UDID" bash ship/demo/walk-firstopen.sh || code=$?
+  exit $code
+fi
+
 
 # -- naming things instead of pointing at them --------------------------------------------------
 AX="$OUT/ax"; mkdir -p "$AX"
