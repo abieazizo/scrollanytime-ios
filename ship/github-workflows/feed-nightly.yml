@@ -1,0 +1,49 @@
+# THE SPEED GATE ON A RUNNER (the owner's Part 9, 2026-10-08) — nightly, a GitHub Actions runner,
+# throttled 4G, cold open to first frame, three passes, the median against the baseline. It posts its
+# verdict to the Worker (POST /inspect/speed, bearer INSPECT_TOKEN), where the
+# self-deploying lane (scripts/autopilot/nightly-deploy.mjs) reads it instead of measuring on the
+# laptop, whose readings are inconclusive more nights than not.
+#
+# WHY THIS FILE IS HERE AND NOT UNDER .github/workflows: the git credential this machine holds cannot
+# push workflow files (no `workflow` scope). Copy it to .github/workflows/feed-nightly.yml and push —
+# the one thing in the self-running feed that needs a hand. Repository secret: INSPECT_TOKEN.
+name: feed-nightly
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: feed-nightly
+  cancel-in-progress: false
+jobs:
+  speed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      INSPECT_TOKEN: ${{ secrets.INSPECT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: rabbis-page
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps webkit
+      - name: The speed gate, three cold opens on a 4G profile
+        id: gate
+        continue-on-error: true
+        run: |
+          node scripts/perf/gate.mjs --origin=https://scrollanytime.com --runs=3 --swipes=10 --baseline=perf/results/ours-webkit-lte.ci.json | tee gate.log
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+      - name: Post the verdict
+        if: always()
+        run: |
+          STATUS="${{ steps.gate.outcome }}"
+          VERDICT=$([ "$STATUS" = "success" ] && echo green || echo red)
+          node -e '
+            const fs = require("node:fs");
+            const log = fs.existsSync("gate.log") ? fs.readFileSync("gate.log", "utf8") : "";
+            const body = { at: Date.now(), verdict: process.argv[1], runner: "github", summary: log.split("\n").filter((l) => /cold-open|swipe|gate:/.test(l)).join("\n").slice(0, 1800) };
+            fetch("https://scrollanytime.com/inspect/speed", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + process.env.INSPECT_TOKEN }, body: JSON.stringify(body) }).then((r) => console.log("posted", r.status));
+          ' "$VERDICT"
