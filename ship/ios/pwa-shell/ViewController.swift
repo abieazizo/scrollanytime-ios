@@ -291,6 +291,7 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     private var stillConnecting: UILabel?
     func showStillConnecting() {
         guard stillConnecting == nil, let host = loadingView else { return }
+        UITestHooks.gateNote("still-connecting", ["failures": firstOpenFailures])
         let l = UILabel()
         l.text = "Still connecting…"
         l.textColor = UIColor(red: 0.961, green: 0.949, blue: 0.918, alpha: 0.72)
@@ -441,6 +442,7 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
     // page it was on (its route survives: the Worker serves the app for any path), behind the
     // loading still, and let the page's "painted" lift it as on any launch.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        UITestHooks.gateNote("webcontent-died", ["url": webView.url?.absoluteString ?? ""])
         htmlIsLoaded = false
         let wasOurs = lastCommittedURL?.host.map { allowedOrigins.contains($0.lowercased()) } ?? false
         let resumeAt = webView.url
@@ -501,6 +503,7 @@ class ViewController: UIViewController, WKNavigationDelegate, UIDocumentInteract
                 loadingView.isHidden = true
                 animateConnectionProblem(false)
                 webView.isHidden = false
+                UITestHooks.gateNote("wall-shell", ["error": firstOpenLastError, "failures": firstOpenFailures])
                 webView.loadHTMLString(offlineFallbackHTML, baseURL: rootUrl)
                 return
             }
@@ -629,6 +632,10 @@ extension ViewController: WKScriptMessageHandler {
             // the XCUITest's record of what the page said (dormant without -saUITest)
             if let said = message.body as? String, said.hasPrefix("uitest-saw:") {
                 UITestHooks.saw(String(said.dropFirst("uitest-saw:".count)))
+            }
+            // the release gate's record of what the page did (dormant without -saGate)
+            if let said = message.body as? String, said.hasPrefix("gate:") {
+                UITestHooks.gateEvent(String(said.dropFirst("gate:".count)))
             }
             if (message.body as? String) == "painted" {
                 // the page exists: tell it about Low Power Mode, heat and memory (B-013)
