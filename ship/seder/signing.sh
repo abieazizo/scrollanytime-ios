@@ -7,6 +7,13 @@ work="$(mktemp -d)"
 ruby "$here/open.rb" "$here/signing.enc" "$work"
 
 keychain="$HOME/Library/Keychains/build.keychain-db"
+if [ ! -f "$keychain" ]; then
+  security create-keychain -p "" build.keychain
+  security default-keychain -s build.keychain
+  security unlock-keychain -p "" build.keychain
+  security set-keychain-settings -t 3600 -u build.keychain
+  security list-keychains -d user -s build.keychain login.keychain
+fi
 security import "$work/key.pem" -k "$keychain" -T /usr/bin/codesign -T /usr/bin/security -A
 security import "$work/cert.cer" -k "$keychain" -T /usr/bin/codesign -A
 # The certificate that vouches for ours, in case this machine does not have it.

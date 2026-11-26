@@ -29,5 +29,12 @@ if [ "$code" -ne 0 ]; then
 fi
 echo "Seder compiles"
 
+# The signed app for the owner's iPhone. Done here, not in the workflow's own signing step:
+# that step insists on an App Store certificate, and Seder is signed for one phone instead.
+if [ -f ../seder/mode ] && [ "$(cut -d' ' -f1 ../seder/mode)" = "build" ]; then
+  bash ../seder/signing.sh
+  bash ../seder/build.sh "$(cut -d' ' -f2 ../seder/mode)"
+fi
+
 # Pictures of the countdown, drawn by the same code the Lock Screen uses.
 if [ -x ../seder/shots.sh ]; then bash ../seder/shots.sh || echo "shots failed (not fatal)"; fi
