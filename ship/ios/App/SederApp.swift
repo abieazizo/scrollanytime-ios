@@ -10,9 +10,13 @@ struct SederApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WebScreen()
-                .ignoresSafeArea()
-                .background(Color("LaunchBG").ignoresSafeArea())
+            if ProcessInfo.processInfo.arguments.contains("-sederDemo") {
+                DemoScreen()
+            } else {
+                WebScreen()
+                    .ignoresSafeArea()
+                    .background(Color("LaunchBG").ignoresSafeArea())
+            }
         }
     }
 }
@@ -21,6 +25,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         LiveManager.shared.begin()
+        if ProcessInfo.processInfo.arguments.contains("-sederDemoLive") {
+            // Build machine only: a real countdown, so the real Lock Screen can be photographed.
+            let now = Date().timeIntervalSince1970
+            LiveManager.shared.show(key: "demo:kiddushin", title: "Masechet Kiddushin", sub: "with Rabbi Resnick", startAt: now - 2820, endAt: now + 4380, next: "Mincha")
+        }
         // Already allowed: make sure the token the server holds is still the right one.
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             if settings.authorizationStatus == .authorized {
