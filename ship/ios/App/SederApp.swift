@@ -27,8 +27,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         LiveManager.shared.begin()
         if ProcessInfo.processInfo.arguments.contains("-sederDemoLive") {
             // Build machine only: a real countdown, so the real Lock Screen can be photographed.
-            let now = Date().timeIntervalSince1970
-            LiveManager.shared.show(key: "demo:kiddushin", title: "Masechet Kiddushin", sub: "with Rabbi Resnick", startAt: now - 2820, endAt: now + 4380, next: "Mincha")
+            // A countdown can only be started once the app is on screen.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                let now = Date().timeIntervalSince1970
+                LiveManager.shared.show(key: "demo:kiddushin", title: "Masechet Kiddushin", sub: "with Rabbi Resnick", startAt: now - 2820, endAt: now + 4380, next: "Mincha")
+            }
         }
         // Already allowed: make sure the token the server holds is still the right one.
         UNUserNotificationCenter.current().getNotificationSettings { settings in

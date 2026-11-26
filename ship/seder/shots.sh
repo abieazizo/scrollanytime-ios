@@ -36,11 +36,12 @@ xcrun simctl io "$dev" screenshot "$out/2-app.png"
 # 3. A real countdown on the real Lock Screen, if this simulator will do it.
 xcrun simctl terminate "$dev" com.abieazizo.seder || true
 xcrun simctl launch "$dev" com.abieazizo.seder -sederDemo 1 -sederDemoLive 1
-sleep 5
+sleep 9
+xcrun simctl spawn "$dev" log show --last 1m --predicate 'process == "Seder"' 2>/dev/null | grep -iE "seder\]|activit" | tail -15 || true
 open -a Simulator --args -CurrentDeviceUDID "$dev" || true
 sleep 8
 osascript -e 'tell application "Simulator" to activate' -e 'delay 1' -e 'tell application "System Events" to keystroke "l" using command down' 2>&1 || echo "could not press the lock key"
-sleep 4
+sleep 5
 xcrun simctl io "$dev" screenshot "$out/3-lock.png"
 osascript -e 'tell application "System Events" to keystroke "h" using {command down, shift down}' 2>&1 || true
 sleep 3

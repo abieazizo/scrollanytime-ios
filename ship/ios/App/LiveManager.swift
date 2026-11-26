@@ -21,6 +21,8 @@ final class LiveManager {
 
     private let defaults = UserDefaults.standard
     private var watching = Set<String>()
+    /// Each countdown's own token, by countdown id, so the right one can be sent again.
+    private var tokens = [String: String]()
     private let lock = NSLock()
 
     /// The token for ordinary alerts.
@@ -75,20 +77,38 @@ final class LiveManager {
         Task {
             // With this token the server can take the countdown down when the block ends.
             for await data in activity.pushTokenUpdates {
-                await self.post(path: "/api/live/token", body: ["device": self.deviceToken ?? "", "key": key, "token": hex(data)])
+                let token = hex(data)
+                self.lock.lock()
+                self.tokens[activity.id] = token
+                self.lock.unlock()
+                await self.post(path: "/api/live/token", body: ["device": self.deviceToken ?? "", "key": key, "token": token])
             }
         }
     }
 
     /// One countdown at a time: the block that started last. Anything long over goes.
     func tidy() {
-        let all = Activity<SederAttributes>.activities
         let now = Date().timeIntervalSince1970
-        let newest = all.map { $0.content.state.startAt }.max() ?? 0
-        for activity in all {
-            let s = activity.content.state
-            if s.startAt < newest || s.endAt < now - 600 {
-                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        // Newest block first. If the app and the server both put up the same block, one stays.
+        let all = Activity<SederAttributes>.activities.sorted { $0.content.state.startAt > $1.content.state.startAt }
+        guard let keep = all.first else { return }
+        var ended = false
+        for activity in all.dropFirst() {
+            ended = true
+            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+        }
+        if keep.content.state.endAt < now - 600 {
+            Task { await keep.end(nil, dismissalPolicy: .immediate) }
+            return
+        }
+        if ended {
+            // The server must hold the token of the one that stayed.
+            lock.lock()
+            let token = tokens[keep.id]
+            lock.unlock()
+            if let token = token {
+                let key = keep.attributes.key
+                Task { await self.post(path: "/api/live/token", body: ["device": self.deviceToken ?? "", "key": key, "token": token]) }
             }
         }
     }
@@ -108,7 +128,10 @@ final class LiveManager {
             }
             return
         }
-        guard endAt > Date().timeIntervalSince1970 + 20 else { return }
+        let now = Date().timeIntervalSince1970
+        guard endAt > now + 20 else { return }
+        // In a block's first minute the server is about to put the countdown up itself: let it.
+        if startToken != nil && now - startAt < 50 && now >= startAt { return }
         do {
             let activity = try Activity.request(
                 attributes: SederAttributes(key: key),
