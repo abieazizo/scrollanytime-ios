@@ -1,0 +1,83 @@
+# The Seder iPhone app. XcodeGen turns this file into the Xcode project on the build machine,
+# so there is no hand-written project file to keep in step.
+#
+# The project and scheme are called "pwa-shell" only because the build workflow it borrows
+# (release-ios.yml in the scrollanytime-ios repo) builds a project of that name. The app is "Seder".
+name: pwa-shell
+options:
+  deploymentTarget:
+    iOS: '17.2'
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    MARKETING_VERSION: '1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    DEVELOPMENT_TEAM: A3K22H2UXZ
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: Apple Development
+    ENABLE_USER_SCRIPT_SANDBOXING: 'NO'
+targets:
+  pwa-shell:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Seder
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        NSSupportsLiveActivities: true
+        NSSupportsLiveActivitiesFrequentUpdates: true
+        UIBackgroundModes: [remote-notification]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UILaunchScreen:
+          UIColorName: LaunchBG
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        WKAppBoundDomains: [seder.abieazizo.workers.dev]
+        SederPushEnv: $(SEDER_PUSH_ENV)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.abieazizo.seder
+        PRODUCT_NAME: Seder
+        CODE_SIGN_ENTITLEMENTS: App/Seder.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        PROVISIONING_PROFILE_SPECIFIER: Seder Dev
+        SEDER_PUSH_ENV: development
+    dependencies:
+      - target: SederLive
+  SederLive:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Live
+      - path: Shared
+    info:
+      path: Live/Info.plist
+      properties:
+        CFBundleDisplayName: Seder
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.abieazizo.seder.live
+        PRODUCT_NAME: SederLive
+        PROVISIONING_PROFILE_SPECIFIER: Seder Live Dev
+        SKIP_INSTALL: 'YES'
+schemes:
+  pwa-shell:
+    build:
+      targets:
+        pwa-shell: all
+    archive:
+      config: Release
